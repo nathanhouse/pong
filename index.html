@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Laser Pong: Zombie Vampires</title>
+  <style>
+    body { margin: 0; background: black; }
+    canvas { display: block; margin: auto; background: black; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="1024" height="768" tabindex="0"></canvas>
+<script>
+// Global Constants
+const WINDOW_WIDTH = 1024;
+const WINDOW_HEIGHT = 768;
+const PADDLE_WIDTH = 20;
+const PADDLE_HEIGHT = 120;
+const BALL_SIZE = 50;
+const PADDLE_SPEED = 15;
+const BALL_SPEED = 4;
+const LASER_SPEED = 8;
+const LASER_WIDTH = 20;
+const LASER_HEIGHT = 5;
+const WINNING_SCORE = 10;
+const LASER_COOLDOWN = 500;
+const PADDLE_HEALTH = 10;
+const WHITE = "white";
+const BLACK = "black";
+const RED = "red";
+const BLUE = "blue";
+const BORDER_WIDTH = 10;
+const SHIELD_DURATION = 2000;
+const SHIELD_RADIUS = 50;
+
+// Set up Canvas
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+canvas.focus(); // Ensure canvas can receive focus for key events
+
+// Audio context and helper tone function
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTone(frequency, duration) {
+  const oscillator = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+  gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  oscillator.start(audioCtx.currentTime);
+  oscillator.stop(audioCtx.currentTime + duration);
+}
+
+function playLaserSound() { playTone(880, 0.1); }
+function playExplosionSound() { playTone(100, 0.2); }
+function playBounceSound() { playTone(440, 0.1); }
+function playHitSound() { playTone(200, 0.1); }
+function playPointSound() { playTone(1000, 0.1); }
+
+// Game Classes
+class Laser {
+  constructor(x, y, direction) {
+    this.x = x;
+    this.y = y;
+    this.width = LASER_WIDTH;
+    this.height = LASER_HEIGHT;
+    this.direction = direction; // 1 for right, -1 for left
+    this.speed = LASER_SPEED * direction;
+  }
+  move() { this.x += this.speed; }
+  draw() {
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+  }
+}
+
+class Paddle {
+  constructor(x, y, color) {
+    this.x = x;
+    this.y = y;
+    this.width = PADDLE_WIDTH;
+    this.height = PADDLE_HEIGHT;
+    this.score = 0;
+    this.color = color;
+    this.alive = true;
+    this.health = PADDLE_HEALTH;
+    this.shieldsRemaining = 5;
+    this.shieldActive = false;
+    this.shieldStartTime = 0;
+  }
+  move(up) {
+    if (up && this.y > BORDER_WIDTH) this.y -= PADDLE_SPEED;
+    if (!up && (this.y + this.height) < (WINDOW_HEIGHT - BORDER_WIDTH)) this.y += PADDLE_SPEED;
+  }
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+    if (this.shieldActive) {
+      ctx.beginPath();
+      ctx.arc(this.x + this.width/2, this.y + this.height/2, SHIELD_RADIUS, 0, Math.PI*2);
+      ctx.strokeStyle = "lime";
+      ctx.stroke();
+    }
+  }
+  activateShield() {
+    if (this.shieldsRemaining > 0) {
+      this.shieldsRemaining--;
+      this.shieldActive = true;
+      this.shieldStartTime = Date.now();
+    }
+  }
+}
+
+class Ball {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = WINDOW_WIDTH/2 - BALL_SIZE/2;
+    this.y = WINDOW_HEIGHT/2 - BALL_SIZE/2;
+    this.size = BALL_SIZE;
+    this.speedX = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
+    this.speedY = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
+  }
+  move() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.y <= BORDER_WIDTH || this.y + this.size >= WINDOW_HEIGHT - BORDER_WIDTH) {
+      this.speedY *= -1;
+      playBounceSound();
+    }
+  }
+  draw() {
+    ctx.fillStyle = WHITE;
+    ctx.beginPath();
+    ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size/2, 0, Math.PI*2);
+    ctx.fill();
+    let eyeRadius = BALL_SIZE / 6;
+    let leftEyeX = this.x + this.size/2 - BALL_SIZE/4;
+    let leftEyeY = this.y + this.size/2 - BALL_SIZE/8;
+    let rightEyeX = this.x + this.size/2 + BALL_SIZE/4;
+    let rightEyeY = this.y + this.size/2 - BALL_SIZE/8;
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(rightEyeX, rightEyeY, eyeRadius, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(this.x + this.size/2, this.y + this.size/2);
+    ctx.lineTo(this.x + this.size/2 - BALL_SIZE/8, this.y + this.size/2 + BALL_SIZE/8);
+    ctx.lineTo(this.x + this.size/2 + BALL_SIZE/8, this.y + this.size/2 + BALL_SIZE/8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(this.x + this.size/2 - BALL_SIZE/3, this.y + this.size/2 + BALL_SIZE/4);
+    ctx.lineTo(this.x + this.size/2, this.y + this.size/2 + BALL_SIZE/3);
+    ctx.lineTo(this.x + this.size/2 + BALL_SIZE/3, this.y + this.size/2 + BALL_SIZE/4);
+    ctx.stroke();
+  }
+}
+
+function drawBorder() {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(0, 0, WINDOW_WIDTH, BORDER_WIDTH);
+  ctx.fillRect(0, WINDOW_HEIGHT - BORDER_WIDTH, WINDOW_WIDTH, BORDER_WIDTH);
+}
+
+function showWinner(winner) {
+  ctx.fillStyle = WHITE;
+  ctx.font = "60px sans-serif";
+  let colorText = winner === "1" ? "Red" : "Blue";
+  let text = colorText + " Wins!";
+  let textWidth = ctx.measureText(text).width;
+  ctx.fillText(text, (WINDOW_WIDTH - textWidth) / 2, WINDOW_HEIGHT/2 - 50);
+  ctx.font = "40px sans-serif";
+  let instruction = "Press SPACE to restart or M for menu";
+  let instWidth = ctx.measureText(instruction).width;
+  ctx.fillText(instruction, (WINDOW_WIDTH - instWidth) / 2, WINDOW_HEIGHT/2 + 50);
+}
+
+// Menu and Splash Screens
+function showSplashScreen() {
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = WHITE;
+  ctx.font = "40px sans-serif";
+  let title = "Laser Pong: Zombie Vampires";
+  let titleWidth = ctx.measureText(title).width;
+  ctx.fillText(title, (WINDOW_WIDTH - titleWidth)/2, 50);
+  ctx.font = "20px monospace";
+  let vampireArt = [
+    "   (  )   ",
+    "  (    )  ",
+    "   (__)   "
+  ];
+  let yOffset = 80;
+  vampireArt.forEach(line => {
+    let lineWidth = ctx.measureText(line).width;
+    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, yOffset);
+    yOffset += 25;
+  });
+  ctx.font = "20px sans-serif";
+  let controls = [
+    "Red Paddle (Left): W (up), S (down), A for laser, Z for shield",
+    "Blue Paddle (Right): Up Arrow (up), Down Arrow (down), Left Arrow for laser, Right Arrow for shield",
+    "Press B to return to menu, and SPACE to restart"
+  ];
+  yOffset += 20;
+  controls.forEach(line => {
+    let lineWidth = ctx.measureText(line).width;
+    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, yOffset);
+    yOffset += 25;
+  });
+  ctx.font = "24px sans-serif";
+  let cont = "Press any key to continue";
+  let contWidth = ctx.measureText(cont).width;
+  ctx.fillText(cont, (WINDOW_WIDTH - contWidth)/2, WINDOW_HEIGHT - 40);
+}
+
+function selectGameMode() {
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = WHITE;
+  ctx.font = "60px sans-serif";
+  let title = "Laser Pong: Zombie Vampires";
+  let titleWidth = ctx.measureText(title).width;
+  ctx.fillText(title, (WINDOW_WIDTH - titleWidth)/2, 50);
+  ctx.font = "36px sans-serif";
+  let options = [
+    "Press 1 for One Player (Play against AI)",
+    "Press 2 for Two Player (Local Multiplayer)"
+  ];
+  options.forEach((opt, index) => {
+    let optWidth = ctx.measureText(opt).width;
+    ctx.fillText(opt, (WINDOW_WIDTH - optWidth)/2, 150 + index * 50);
+  });
+}
+
+function selectColor() {
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = WHITE;
+  ctx.font = "36px sans-serif";
+  let prompts = [
+    "Press 1 for Red (Left Paddle)",
+    "Press 2 for Blue (Right Paddle)"
+  ];
+  prompts.forEach((line, index) => {
+    let lineWidth = ctx.measureText(line).width;
+    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, 150 + index * 50);
+  });
+}
+
+function selectDifficulty() {
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = WHITE;
+  ctx.font = "36px sans-serif";
+  let diffs = [
+    "Press 1 for Easy AI Difficulty",
+    "Press 2 for Medium AI Difficulty",
+    "Press 3 for Hard AI Difficulty"
+  ];
+  diffs.forEach((line, index) => {
+    let lineWidth = ctx.measureText(line).width;
+    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, 150 + index * 50);
+  });
+}
+
+// AI movement helper
+function aiMove(paddle, ball, difficulty, currentTime, lastShot) {
+  const factors = {
+    "AI_EASY": { accuracy: 0.3, cooldownFactor: 1.0 },
+    "AI_MEDIUM": { accuracy: 0.8, cooldownFactor: 1.0 },
+    "AI_HARD": { accuracy: 1.0, cooldownFactor: 0.5 }
+  };
+  let settings = factors[difficulty];
+  let accuracy = settings.accuracy;
+  let cooldownFactor = settings.cooldownFactor;
+  if (Math.random() < accuracy) {
+    if (ball.y + ball.size/2 > paddle.y + PADDLE_HEIGHT/4) {
+      paddle.move(false);
+    } else if (ball.y + ball.size/2 < paddle.y + PADDLE_HEIGHT/4) {
+      paddle.move(true);
+    }
+  }
+  if (currentTime - lastShot >= LASER_COOLDOWN * cooldownFactor) {
+    if (Math.abs(ball.y + ball.size/2 - (paddle.y + paddle.height/2)) < PADDLE_HEIGHT/2) {
+      return true;
+    }
+    if (difficulty === "AI_HARD") {
+      if (paddle.x < WINDOW_WIDTH/2 && ball.speedX < 0) return true;
+      if (paddle.x >= WINDOW_WIDTH/2 && ball.speedX > 0) return true;
+    }
+  }
+  return false;
+}
+
+// Game Session
+let game;
+let gameMode = "";
+let aiSide = "";
+let difficulty = "";
+
+function startGame() {
+  game = {
+    leftPaddle: new Paddle(50, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, RED),
+    rightPaddle: new Paddle(WINDOW_WIDTH - 50 - PADDLE_WIDTH, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, BLUE),
+    ball: new Ball(),
+    lasers: [],
+    lastLeftShot: 0,
+    lastRightShot: 0,
+    gameOver: false,
+    isTwoPlayer: (gameMode === "TWO_PLAYER"),
+    aiLeft: false,
+    aiRight: false,
+    countdown: 5,
+    countdownStart: Date.now()
+  };
+  if (gameMode === "ONE_PLAYER") {
+    game.aiLeft = (aiSide === "red");
+    game.aiRight = (aiSide === "blue");
+  }
+}
+
+function updateGame(deltaTime) {
+  let currentTime = Date.now();
+  if (game.countdown > 0) {
+    if (currentTime - game.countdownStart >= 1000) {
+      game.countdown--;
+      game.countdownStart = currentTime;
+    }
+    ctx.fillStyle = BLACK;
+    ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+    ctx.fillStyle = WHITE;
+    ctx.font = "100px sans-serif";
+    let text = game.countdown > 0 ? game.countdown : "Go!";
+    let textWidth = ctx.measureText(text).width;
+    ctx.fillText(text, (WINDOW_WIDTH - textWidth)/2, WINDOW_HEIGHT/2);
+    return;
+  }
+  
+  if (game.isTwoPlayer || !game.aiLeft) {
+    if (keysPressed["w"]) game.leftPaddle.move(true);
+    if (keysPressed["s"]) game.leftPaddle.move(false);
+  } else {
+    if (aiMove(game.leftPaddle, game.ball, difficulty, currentTime, game.lastLeftShot)) {
+      game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
+      playLaserSound();
+      game.lastLeftShot = currentTime;
+    }
+  }
+  if (game.isTwoPlayer || !game.aiRight) {
+    if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
+    if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
+  } else {
+    if (aiMove(game.rightPaddle, game.ball, difficulty, currentTime, game.lastRightShot)) {
+      game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
+      playLaserSound();
+      game.lastRightShot = currentTime;
+    }
+  }
+  
+  if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["a"] && game.leftPaddle.alive && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
+    game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
+    playLaserSound();
+    game.lastLeftShot = currentTime;
+  }
+  if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowLeft"] && game.rightPaddle.alive && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
+    game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
+    playLaserSound();
+    game.lastRightShot = currentTime;
+  }
+  if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["z"] && !game.leftPaddle.shieldActive) {
+    game.leftPaddle.activateShield();
+  }
+  if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowRight"] && !game.rightPaddle.shieldActive) {
+    game.rightPaddle.activateShield();
+  }
+  
+  if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
+    game.leftPaddle.shieldActive = false;
+  if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
+    game.rightPaddle.shieldActive = false;
+  
+  for (let i = game.lasers.length - 1; i >= 0; i--) {
+    let laser = game.lasers[i];
+    laser.move();
+    if (laser.x < 0 || laser.x > WINDOW_WIDTH) {
+      game.lasers.splice(i, 1);
+      continue;
+    }
+    if (game.ball.x < laser.x + laser.width && game.ball.x + game.ball.size > laser.x &&
+        game.ball.y < laser.y + laser.height && game.ball.y + game.ball.size > laser.y) {
+      playExplosionSound();
+      if (laser.direction > 0) game.leftPaddle.score++;
+      else game.rightPaddle.score++;
+      game.ball.reset();
+      game.lasers.splice(i, 1);
+      break;
+    }
+    if (laser.direction > 0 && game.rightPaddle.alive &&
+        laser.x < game.rightPaddle.x + game.rightPaddle.width &&
+        laser.y < game.rightPaddle.y + game.rightPaddle.height &&
+        laser.y + laser.height > game.rightPaddle.y &&
+        !game.rightPaddle.shieldActive) {
+      playHitSound();
+      game.rightPaddle.health--;
+      if (game.rightPaddle.health <= 0) {
+        game.rightPaddle.alive = false;
+        game.gameOver = true;
+      }
+      game.lasers.splice(i, 1);
+      continue;
+    } else if (laser.direction < 0 && game.leftPaddle.alive &&
+        laser.x < game.leftPaddle.x + game.leftPaddle.width &&
+        laser.y < game.leftPaddle.y + game.leftPaddle.height &&
+        laser.y + laser.height > game.leftPaddle.y &&
+        !game.leftPaddle.shieldActive) {
+      playHitSound();
+      game.leftPaddle.health--;
+      if (game.leftPaddle.health <= 0) {
+        game.leftPaddle.alive = false;
+        game.gameOver = true;
+      }
+      game.lasers.splice(i, 1);
+      continue;
+    }
+  }
+  
+  if (game.leftPaddle.alive) game.ball.move();
+  
+  if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width &&
+      game.ball.x + game.ball.size > game.leftPaddle.x &&
+      game.ball.y < game.leftPaddle.y + game.leftPaddle.height &&
+      game.ball.y + game.ball.size > game.leftPaddle.y) {
+    game.ball.speedX *= -1;
+    playBounceSound();
+  }
+  if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width &&
+      game.ball.x + game.ball.size > game.rightPaddle.x &&
+      game.ball.y < game.rightPaddle.y + game.rightPaddle.height &&
+      game.ball.y + game.ball.size > game.rightPaddle.y) {
+    game.ball.speedX *= -1;
+    playBounceSound();
+  }
+  
+  if (game.ball.x <= BORDER_WIDTH) {
+    game.rightPaddle.score++;
+    playPointSound();
+    game.ball.reset();
+  }
+  if (game.ball.x + game.ball.size >= WINDOW_WIDTH - BORDER_WIDTH) {
+    game.leftPaddle.score++;
+    playPointSound();
+    game.ball.reset();
+  }
+  
+  if (game.leftPaddle.score >= WINNING_SCORE || game.rightPaddle.score >= WINNING_SCORE)
+    game.gameOver = true;
+  
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  drawBorder();
+  if (game.leftPaddle.alive) game.leftPaddle.draw();
+  if (game.rightPaddle.alive) game.rightPaddle.draw();
+  game.ball.draw();
+  game.lasers.forEach(laser => laser.draw());
+  
+  ctx.fillStyle = WHITE;
+  ctx.font = "36px sans-serif";
+  ctx.fillText(game.leftPaddle.score, WINDOW_WIDTH/4, 40);
+  ctx.fillText(game.rightPaddle.score, 3*WINDOW_WIDTH/4, 40);
+  ctx.font = "24px sans-serif";
+  ctx.fillText("HP: " + game.leftPaddle.health, WINDOW_WIDTH/4, 70);
+  ctx.fillText("HP: " + game.rightPaddle.health, 3*WINDOW_WIDTH/4, 70);
+  ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 100);
+  ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 100);
+  if (gameMode === "ONE_PLAYER") {
+    let diffStr = difficulty === "AI_EASY" ? "Easy" : difficulty === "AI_MEDIUM" ? "Medium" : "Hard";
+    ctx.fillText("Difficulty: " + diffStr, 10, 30);
+  }
+}
+
+// Game Loop and State Handling
+let currentScreen = "splash"; // "splash", "menu", or "game"
+let lastTime = 0;
+
+function gameLoop(timestamp) {
+  let deltaTime = timestamp - lastTime;
+  lastTime = timestamp;
+  if (currentScreen === "splash") {
+    showSplashScreen();
+  } else if (currentScreen === "menu") {
+    if (!gameMode) {
+      selectGameMode();
+    } else if (gameMode === "ONE_PLAYER" && !aiSide) {
+      selectColor();
+    } else if (gameMode === "ONE_PLAYER" && aiSide && !difficulty) {
+      selectDifficulty();
+    }
+  } else if (currentScreen === "game") {
+    if (!game.gameOver) updateGame(deltaTime);
+    else {
+      ctx.fillStyle = BLACK;
+      ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+      let winner = (game.leftPaddle.score >= WINNING_SCORE || !game.rightPaddle.alive) ? "1" : "2";
+      showWinner(winner);
+    }
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// Input Handling
+let keysPressed = {};
+document.addEventListener("keydown", (e) => {
+  console.log("Key pressed:", e.key, "Current screen:", currentScreen); // Debugging
+  keysPressed[e.key] = true;
+  if (currentScreen === "splash") {
+    currentScreen = "menu";
+    selectGameMode(); // Draw menu immediately
+    console.log("Transitioned to menu"); // Debugging
+  } else if (currentScreen === "menu") {
+    if (!gameMode) {
+      if (e.key === "1") { gameMode = "ONE_PLAYER"; }
+      else if (e.key === "2") { gameMode = "TWO_PLAYER"; currentScreen = "game"; startGame(); }
+    } else if (gameMode === "ONE_PLAYER" && !aiSide) {
+      if (e.key === "1") { aiSide = "red"; }
+      else if (e.key === "2") { aiSide = "blue"; }
+    } else if (gameMode === "ONE_PLAYER" && aiSide && !difficulty) {
+      if (e.key === "1") { difficulty = "AI_EASY"; currentScreen = "game"; startGame(); }
+      else if (e.key === "2") { difficulty = "AI_MEDIUM"; currentScreen = "game"; startGame(); }
+      else if (e.key === "3") { difficulty = "AI_HARD"; currentScreen = "game"; startGame(); }
+    }
+  } else if (currentScreen === "game" && game.gameOver) {
+    if (e.key === " ") startGame();
+    else if (e.key.toLowerCase() === "m") {
+      currentScreen = "splash";
+      gameMode = "";
+      aiSide = "";
+      difficulty = "";
+      showSplashScreen();
+    }
+  }
+});
+document.addEventListener("keyup", (e) => { keysPressed[e.key] = false; });
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
