@@ -9,9 +9,9 @@
   </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="1024" height="768" tabindex="0"></canvas>
+<canvas id="gameCanvas" width="1024" height="768"></canvas>
 <script>
-// Global Constants
+// Constants
 const WINDOW_WIDTH = 1024;
 const WINDOW_HEIGHT = 768;
 const PADDLE_WIDTH = 20;
@@ -33,12 +33,11 @@ const BORDER_WIDTH = 10;
 const SHIELD_DURATION = 2000;
 const SHIELD_RADIUS = 50;
 
-// Set up Canvas
+// Canvas Setup
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-canvas.focus(); // Ensure canvas can receive focus for key events
 
-// Audio context and helper tone function
+// Audio Setup
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 function playTone(frequency, duration) {
@@ -140,7 +139,7 @@ class Ball {
     let leftEyeY = this.y + this.size/2 - BALL_SIZE/8;
     let rightEyeX = this.x + this.size/2 + BALL_SIZE/4;
     let rightEyeY = this.y + this.size/2 - BALL_SIZE/8;
-    ctx.fillStyle = "black";
+    ctx.fillStyle = BLACK;
     ctx.beginPath();
     ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI*2);
     ctx.fill();
@@ -157,10 +156,12 @@ class Ball {
     ctx.moveTo(this.x + this.size/2 - BALL_SIZE/3, this.y + this.size/2 + BALL_SIZE/4);
     ctx.lineTo(this.x + this.size/2, this.y + this.size/2 + BALL_SIZE/3);
     ctx.lineTo(this.x + this.size/2 + BALL_SIZE/3, this.y + this.size/2 + BALL_SIZE/4);
+    ctx.strokeStyle = BLACK;
     ctx.stroke();
   }
 }
 
+// Helper Functions
 function drawBorder() {
   ctx.fillStyle = WHITE;
   ctx.fillRect(0, 0, WINDOW_WIDTH, BORDER_WIDTH);
@@ -180,7 +181,7 @@ function showWinner(winner) {
   ctx.fillText(instruction, (WINDOW_WIDTH - instWidth) / 2, WINDOW_HEIGHT/2 + 50);
 }
 
-// Menu and Splash Screens
+// UI Screens
 function showSplashScreen() {
   ctx.fillStyle = BLACK;
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -188,7 +189,7 @@ function showSplashScreen() {
   ctx.font = "40px sans-serif";
   let title = "Laser Pong: Zombie Vampires";
   let titleWidth = ctx.measureText(title).width;
-  ctx.fillText(title, (WINDOW_WIDTH - titleWidth)/2, 50);
+  ctx.fillText(title, (WINDOW_WIDTH - titleWidth)/2, 30);
   ctx.font = "20px monospace";
   let vampireArt = [
     "   (  )   ",
@@ -201,11 +202,11 @@ function showSplashScreen() {
     ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, yOffset);
     yOffset += 25;
   });
-  ctx.font = "20px sans-serif";
+  ctx.font = "24px sans-serif";
   let controls = [
-    "Red Paddle (Left): W (up), S (down), A for laser, Z for shield",
-    "Blue Paddle (Right): Up Arrow (up), Down Arrow (down), Left Arrow for laser, Right Arrow for shield",
-    "Press B to return to menu, and SPACE to restart"
+    "Red Paddle (Left): W (up), S (down), A (laser), Z (shield)",
+    "Blue Paddle (Right): Up (up), Down (down), Left (laser), Right (shield)",
+    "Press B to return to menu, SPACE to restart"
   ];
   yOffset += 20;
   controls.forEach(line => {
@@ -269,7 +270,7 @@ function selectDifficulty() {
   });
 }
 
-// AI movement helper
+// AI Logic
 function aiMove(paddle, ball, difficulty, currentTime, lastShot) {
   const factors = {
     "AI_EASY": { accuracy: 0.3, cooldownFactor: 1.0 },
@@ -300,10 +301,6 @@ function aiMove(paddle, ball, difficulty, currentTime, lastShot) {
 
 // Game Session
 let game;
-let gameMode = "";
-let aiSide = "";
-let difficulty = "";
-
 function startGame() {
   game = {
     leftPaddle: new Paddle(50, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, RED),
@@ -325,7 +322,7 @@ function startGame() {
   }
 }
 
-function updateGame(deltaTime) {
+function updateGame() {
   let currentTime = Date.now();
   if (game.countdown > 0) {
     if (currentTime - game.countdownStart >= 1000) {
@@ -341,7 +338,7 @@ function updateGame(deltaTime) {
     ctx.fillText(text, (WINDOW_WIDTH - textWidth)/2, WINDOW_HEIGHT/2);
     return;
   }
-  
+
   if (game.isTwoPlayer || !game.aiLeft) {
     if (keysPressed["w"]) game.leftPaddle.move(true);
     if (keysPressed["s"]) game.leftPaddle.move(false);
@@ -362,7 +359,7 @@ function updateGame(deltaTime) {
       game.lastRightShot = currentTime;
     }
   }
-  
+
   if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["a"] && game.leftPaddle.alive && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
     game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
     playLaserSound();
@@ -379,12 +376,12 @@ function updateGame(deltaTime) {
   if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowRight"] && !game.rightPaddle.shieldActive) {
     game.rightPaddle.activateShield();
   }
-  
+
   if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
     game.leftPaddle.shieldActive = false;
   if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
     game.rightPaddle.shieldActive = false;
-  
+
   for (let i = game.lasers.length - 1; i >= 0; i--) {
     let laser = game.lasers[i];
     laser.move();
@@ -392,8 +389,8 @@ function updateGame(deltaTime) {
       game.lasers.splice(i, 1);
       continue;
     }
-    if (game.ball.x < laser.x + laser.width && game.ball.x + game.ball.size > laser.x &&
-        game.ball.y < laser.y + laser.height && game.ball.y + game.ball.size > laser.y) {
+    if (laser.x < game.ball.x + game.ball.size && laser.x + laser.width > game.ball.x &&
+        laser.y < game.ball.y + game.ball.size && laser.y + laser.height > game.ball.y) {
       playExplosionSound();
       if (laser.direction > 0) game.leftPaddle.score++;
       else game.rightPaddle.score++;
@@ -402,9 +399,8 @@ function updateGame(deltaTime) {
       break;
     }
     if (laser.direction > 0 && game.rightPaddle.alive &&
-        laser.x < game.rightPaddle.x + game.rightPaddle.width &&
-        laser.y < game.rightPaddle.y + game.rightPaddle.height &&
-        laser.y + laser.height > game.rightPaddle.y &&
+        laser.x < game.rightPaddle.x + game.rightPaddle.width && laser.x + laser.width > game.rightPaddle.x &&
+        laser.y < game.rightPaddle.y + game.rightPaddle.height && laser.y + laser.height > game.rightPaddle.y &&
         !game.rightPaddle.shieldActive) {
       playHitSound();
       game.rightPaddle.health--;
@@ -413,12 +409,10 @@ function updateGame(deltaTime) {
         game.gameOver = true;
       }
       game.lasers.splice(i, 1);
-      continue;
     } else if (laser.direction < 0 && game.leftPaddle.alive &&
-        laser.x < game.leftPaddle.x + game.leftPaddle.width &&
-        laser.y < game.leftPaddle.y + game.leftPaddle.height &&
-        laser.y + laser.height > game.leftPaddle.y &&
-        !game.leftPaddle.shieldActive) {
+               laser.x < game.leftPaddle.x + game.leftPaddle.width && laser.x + laser.width > game.leftPaddle.x &&
+               laser.y < game.leftPaddle.y + game.leftPaddle.height && laser.y + laser.height > game.leftPaddle.y &&
+               !game.leftPaddle.shieldActive) {
       playHitSound();
       game.leftPaddle.health--;
       if (game.leftPaddle.health <= 0) {
@@ -426,27 +420,22 @@ function updateGame(deltaTime) {
         game.gameOver = true;
       }
       game.lasers.splice(i, 1);
-      continue;
     }
   }
-  
+
   if (game.leftPaddle.alive) game.ball.move();
-  
-  if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width &&
-      game.ball.x + game.ball.size > game.leftPaddle.x &&
-      game.ball.y < game.leftPaddle.y + game.leftPaddle.height &&
-      game.ball.y + game.ball.size > game.leftPaddle.y) {
+
+  if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width && game.ball.x + game.ball.size > game.leftPaddle.x &&
+      game.ball.y < game.leftPaddle.y + game.leftPaddle.height && game.ball.y + game.ball.size > game.leftPaddle.y) {
     game.ball.speedX *= -1;
     playBounceSound();
   }
-  if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width &&
-      game.ball.x + game.ball.size > game.rightPaddle.x &&
-      game.ball.y < game.rightPaddle.y + game.rightPaddle.height &&
-      game.ball.y + game.ball.size > game.rightPaddle.y) {
+  if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width && game.ball.x + game.ball.size > game.rightPaddle.x &&
+      game.ball.y < game.rightPaddle.y + game.rightPaddle.height && game.ball.y + game.ball.size > game.rightPaddle.y) {
     game.ball.speedX *= -1;
     playBounceSound();
   }
-  
+
   if (game.ball.x <= BORDER_WIDTH) {
     game.rightPaddle.score++;
     playPointSound();
@@ -457,10 +446,10 @@ function updateGame(deltaTime) {
     playPointSound();
     game.ball.reset();
   }
-  
+
   if (game.leftPaddle.score >= WINNING_SCORE || game.rightPaddle.score >= WINNING_SCORE)
     game.gameOver = true;
-  
+
   ctx.fillStyle = BLACK;
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
   drawBorder();
@@ -468,24 +457,27 @@ function updateGame(deltaTime) {
   if (game.rightPaddle.alive) game.rightPaddle.draw();
   game.ball.draw();
   game.lasers.forEach(laser => laser.draw());
-  
+
   ctx.fillStyle = WHITE;
   ctx.font = "36px sans-serif";
-  ctx.fillText(game.leftPaddle.score, WINDOW_WIDTH/4, 40);
-  ctx.fillText(game.rightPaddle.score, 3*WINDOW_WIDTH/4, 40);
+  ctx.fillText(game.leftPaddle.score, WINDOW_WIDTH/4, 60); // Adjusted y-position
+  ctx.fillText(game.rightPaddle.score, 3*WINDOW_WIDTH/4, 60); // Adjusted y-position
   ctx.font = "24px sans-serif";
-  ctx.fillText("HP: " + game.leftPaddle.health, WINDOW_WIDTH/4, 70);
-  ctx.fillText("HP: " + game.rightPaddle.health, 3*WINDOW_WIDTH/4, 70);
-  ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 100);
-  ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 100);
+  ctx.fillText("HP: " + game.leftPaddle.health, WINDOW_WIDTH/4, 90); // Adjusted y-position
+  ctx.fillText("HP: " + game.rightPaddle.health, 3*WINDOW_WIDTH/4, 90); // Adjusted y-position
+  ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 120); // Adjusted y-position
+  ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 120); // Adjusted y-position
   if (gameMode === "ONE_PLAYER") {
     let diffStr = difficulty === "AI_EASY" ? "Easy" : difficulty === "AI_MEDIUM" ? "Medium" : "Hard";
-    ctx.fillText("Difficulty: " + diffStr, 10, 30);
+    ctx.fillText("Difficulty: " + diffStr, 10, 30); // Adjusted y-position to avoid border
   }
 }
 
-// Game Loop and State Handling
-let currentScreen = "splash"; // "splash", "menu", or "game"
+// Game Loop and State Management
+let currentScreen = "splash";
+let gameMode = "";
+let aiSide = "";
+let difficulty = "";
 let lastTime = 0;
 
 function gameLoop(timestamp) {
@@ -516,19 +508,16 @@ function gameLoop(timestamp) {
 // Input Handling
 let keysPressed = {};
 document.addEventListener("keydown", (e) => {
-  console.log("Key pressed:", e.key, "Current screen:", currentScreen); // Debugging
   keysPressed[e.key] = true;
   if (currentScreen === "splash") {
     currentScreen = "menu";
-    selectGameMode(); // Draw menu immediately
-    console.log("Transitioned to menu"); // Debugging
   } else if (currentScreen === "menu") {
     if (!gameMode) {
       if (e.key === "1") { gameMode = "ONE_PLAYER"; }
       else if (e.key === "2") { gameMode = "TWO_PLAYER"; currentScreen = "game"; startGame(); }
     } else if (gameMode === "ONE_PLAYER" && !aiSide) {
-      if (e.key === "1") { aiSide = "red"; }
-      else if (e.key === "2") { aiSide = "blue"; }
+      if (e.key === "1") { aiSide = "blue"; }  // Player chooses red, AI controls blue
+      else if (e.key === "2") { aiSide = "red"; }  // Player chooses blue, AI controls red
     } else if (gameMode === "ONE_PLAYER" && aiSide && !difficulty) {
       if (e.key === "1") { difficulty = "AI_EASY"; currentScreen = "game"; startGame(); }
       else if (e.key === "2") { difficulty = "AI_MEDIUM"; currentScreen = "game"; startGame(); }
@@ -541,8 +530,12 @@ document.addEventListener("keydown", (e) => {
       gameMode = "";
       aiSide = "";
       difficulty = "";
-      showSplashScreen();
     }
+  } else if (currentScreen === "game" && e.key.toLowerCase() === "b") {
+    currentScreen = "splash";
+    gameMode = "";
+    aiSide = "";
+    difficulty = "";
   }
 });
 document.addEventListener("keyup", (e) => { keysPressed[e.key] = false; });
