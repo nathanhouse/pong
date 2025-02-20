@@ -32,6 +32,7 @@ const BLUE = "blue";
 const BORDER_WIDTH = 10;
 const SHIELD_DURATION = 2000;
 const SHIELD_RADIUS = 50;
+const VERSION = "0.01";  // Beta version number
 
 // Canvas Setup
 const canvas = document.getElementById("gameCanvas");
@@ -203,6 +204,9 @@ function showSplashScreen() {
     yOffset += 25;
   });
   ctx.font = "24px sans-serif";
+  let versionText = `Version: ${VERSION} (Beta)`;
+  let versionWidth = ctx.measureText(versionText).width;
+  ctx.fillText(versionText, (WINDOW_WIDTH - versionWidth)/2, yOffset += 20);
   let controls = [
     "Red Paddle (Left): W (up), S (down), A (laser), Z (shield)",
     "Blue Paddle (Right): Up (up), Down (down), Left (laser), Right (shield)",
@@ -460,16 +464,16 @@ function updateGame() {
 
   ctx.fillStyle = WHITE;
   ctx.font = "36px sans-serif";
-  ctx.fillText(game.leftPaddle.score, WINDOW_WIDTH/4, 60); // Adjusted y-position
-  ctx.fillText(game.rightPaddle.score, 3*WINDOW_WIDTH/4, 60); // Adjusted y-position
+  ctx.fillText(game.leftPaddle.score, WINDOW_WIDTH/4, 60);
+  ctx.fillText(game.rightPaddle.score, 3*WINDOW_WIDTH/4, 60);
   ctx.font = "24px sans-serif";
-  ctx.fillText("HP: " + game.leftPaddle.health, WINDOW_WIDTH/4, 90); // Adjusted y-position
-  ctx.fillText("HP: " + game.rightPaddle.health, 3*WINDOW_WIDTH/4, 90); // Adjusted y-position
-  ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 120); // Adjusted y-position
-  ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 120); // Adjusted y-position
+  ctx.fillText("HP: " + game.leftPaddle.health, WINDOW_WIDTH/4, 90);
+  ctx.fillText("HP: " + game.rightPaddle.health, 3*WINDOW_WIDTH/4, 90);
+  ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 120);
+  ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 120);
   if (gameMode === "ONE_PLAYER") {
     let diffStr = difficulty === "AI_EASY" ? "Easy" : difficulty === "AI_MEDIUM" ? "Medium" : "Hard";
-    ctx.fillText("Difficulty: " + diffStr, 10, 30); // Adjusted y-position to avoid border
+    ctx.fillText("Difficulty: " + diffStr, 10, 30);
   }
 }
 
