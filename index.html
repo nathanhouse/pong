@@ -89,19 +89,24 @@ class Paddle {
     this.shieldsRemaining = 5;
     this.shieldActive = false;
     this.shieldStartTime = 0;
+    this.lives = 3;  // Starting lives
+    this.hitCount = 0;  // Track ball hits
+    this.totalScore = 0;  // Total score calculation
   }
   move(up) {
     if (up && this.y > BORDER_WIDTH) this.y -= PADDLE_SPEED;
     if (!up && (this.y + this.height) < (WINDOW_HEIGHT - BORDER_WIDTH)) this.y += PADDLE_SPEED;
   }
   draw() {
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.width, this.height);
-    if (this.shieldActive) {
-      ctx.beginPath();
-      ctx.arc(this.x + this.width/2, this.y + this.height/2, SHIELD_RADIUS, 0, Math.PI*2);
-      ctx.strokeStyle = "lime";
-      ctx.stroke();
+    if (this.alive) {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      if (this.shieldActive) {
+        ctx.beginPath();
+        ctx.arc(this.x + this.width/2, this.y + this.height/2, SHIELD_RADIUS, 0, Math.PI*2);
+        ctx.strokeStyle = "lime";
+        ctx.stroke();
+      }
     }
   }
   activateShield() {
@@ -110,6 +115,13 @@ class Paddle {
       this.shieldActive = true;
       this.shieldStartTime = Date.now();
     }
+  }
+  calculateTotalScore() {
+    const pointsPerHit = 10;
+    const penaltyPerLifeLost = -50;
+    const bonusPerLifeRemaining = 100;
+    const livesLost = 3 - this.lives;  // Assuming starting lives are 3
+    this.totalScore = (this.hitCount * pointsPerHit) + (livesLost * penaltyPerLifeLost) + (this.lives * bonusPerLifeRemaining);
   }
 }
 
@@ -343,137 +355,153 @@ function updateGame() {
     return;
   }
 
-  if (game.isTwoPlayer || !game.aiLeft) {
-    if (keysPressed["w"]) game.leftPaddle.move(true);
-    if (keysPressed["s"]) game.leftPaddle.move(false);
-  } else {
-    if (aiMove(game.leftPaddle, game.ball, difficulty, currentTime, game.lastLeftShot)) {
+  if (game.leftPaddle.alive && game.rightPaddle.alive) {
+    if (game.isTwoPlayer || !game.aiLeft) {
+      if (keysPressed["w"]) game.leftPaddle.move(true);
+      if (keysPressed["s"]) game.leftPaddle.move(false);
+    } else {
+      if (aiMove(game.leftPaddle, game.ball, difficulty, currentTime, game.lastLeftShot)) {
+        game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
+        playLaserSound();
+        game.lastLeftShot = currentTime;
+      }
+    }
+    if (game.isTwoPlayer || !game.aiRight) {
+      if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
+      if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
+    } else {
+      if (aiMove(game.rightPaddle, game.ball, difficulty, currentTime, game.lastRightShot)) {
+        game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
+        playLaserSound();
+        game.lastRightShot = currentTime;
+      }
+    }
+
+    if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["a"] && game.leftPaddle.alive && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
       game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
       playLaserSound();
       game.lastLeftShot = currentTime;
     }
-  }
-  if (game.isTwoPlayer || !game.aiRight) {
-    if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
-    if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
-  } else {
-    if (aiMove(game.rightPaddle, game.ball, difficulty, currentTime, game.lastRightShot)) {
+    if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowLeft"] && game.rightPaddle.alive && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
       game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
       playLaserSound();
       game.lastRightShot = currentTime;
     }
-  }
-
-  if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["a"] && game.leftPaddle.alive && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
-    game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
-    playLaserSound();
-    game.lastLeftShot = currentTime;
-  }
-  if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowLeft"] && game.rightPaddle.alive && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
-    game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
-    playLaserSound();
-    game.lastRightShot = currentTime;
-  }
-  if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["z"] && !game.leftPaddle.shieldActive) {
-    game.leftPaddle.activateShield();
-  }
-  if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowRight"] && !game.rightPaddle.shieldActive) {
-    game.rightPaddle.activateShield();
-  }
-
-  if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
-    game.leftPaddle.shieldActive = false;
-  if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
-    game.rightPaddle.shieldActive = false;
-
-  for (let i = game.lasers.length - 1; i >= 0; i--) {
-    let laser = game.lasers[i];
-    laser.move();
-    if (laser.x < 0 || laser.x > WINDOW_WIDTH) {
-      game.lasers.splice(i, 1);
-      continue;
+    if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["z"] && !game.leftPaddle.shieldActive) {
+      game.leftPaddle.activateShield();
     }
-    if (laser.x < game.ball.x + game.ball.size && laser.x + laser.width > game.ball.x &&
-        laser.y < game.ball.y + game.ball.size && laser.y + laser.height > game.ball.y) {
-      playExplosionSound();
-      if (laser.direction > 0) game.leftPaddle.score++;
-      else game.rightPaddle.score++;
-      game.ball.reset();
-      game.lasers.splice(i, 1);
-      break;
+    if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowRight"] && !game.rightPaddle.shieldActive) {
+      game.rightPaddle.activateShield();
     }
-    if (laser.direction > 0 && game.rightPaddle.alive &&
-        laser.x < game.rightPaddle.x + game.rightPaddle.width && laser.x + laser.width > game.rightPaddle.x &&
-        laser.y < game.rightPaddle.y + game.rightPaddle.height && laser.y + laser.height > game.rightPaddle.y &&
-        !game.rightPaddle.shieldActive) {
-      playHitSound();
-      game.rightPaddle.health--;
-      if (game.rightPaddle.health <= 0) {
-        game.rightPaddle.alive = false;
-        game.gameOver = true;
+
+    if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
+      game.leftPaddle.shieldActive = false;
+    if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
+      game.rightPaddle.shieldActive = false;
+
+    for (let i = game.lasers.length - 1; i >= 0; i--) {
+      let laser = game.lasers[i];
+      laser.move();
+      if (laser.x < 0 || laser.x > WINDOW_WIDTH) {
+        game.lasers.splice(i, 1);
+        continue;
       }
-      game.lasers.splice(i, 1);
-    } else if (laser.direction < 0 && game.leftPaddle.alive &&
-               laser.x < game.leftPaddle.x + game.leftPaddle.width && laser.x + laser.width > game.leftPaddle.x &&
-               laser.y < game.leftPaddle.y + game.leftPaddle.height && laser.y + laser.height > game.leftPaddle.y &&
-               !game.leftPaddle.shieldActive) {
-      playHitSound();
-      game.leftPaddle.health--;
-      if (game.leftPaddle.health <= 0) {
+      if (laser.x < game.ball.x + game.ball.size && laser.x + laser.width > game.ball.x &&
+          laser.y < game.ball.y + game.ball.size && laser.y + laser.height > game.ball.y) {
+        playExplosionSound();
+        if (laser.direction > 0) game.leftPaddle.score++;
+        else game.rightPaddle.score++;
+        game.ball.reset();
+        game.lasers.splice(i, 1);
+        break;
+      }
+      if (laser.direction > 0 && game.rightPaddle.alive &&
+          laser.x < game.rightPaddle.x + game.rightPaddle.width && laser.x + laser.width > game.rightPaddle.x &&
+          laser.y < game.rightPaddle.y + game.rightPaddle.height && laser.y + laser.height > game.rightPaddle.y &&
+          !game.rightPaddle.shieldActive) {
+        playHitSound();
+        game.rightPaddle.health--;
+        if (game.rightPaddle.health <= 0) {
+          game.rightPaddle.alive = false;
+          game.gameOver = true;
+        }
+        game.lasers.splice(i, 1);
+      } else if (laser.direction < 0 && game.leftPaddle.alive &&
+                 laser.x < game.leftPaddle.x + game.leftPaddle.width && laser.x + laser.width > game.leftPaddle.x &&
+                 laser.y < game.leftPaddle.y + game.leftPaddle.height && laser.y + laser.height > game.leftPaddle.y &&
+                 !game.leftPaddle.shieldActive) {
+        playHitSound();
+        game.leftPaddle.health--;
+        if (game.leftPaddle.health <= 0) {
+          game.leftPaddle.alive = false;
+          game.gameOver = true;
+        }
+        game.lasers.splice(i, 1);
+      }
+    }
+
+    if (game.leftPaddle.alive) game.ball.move();
+
+    if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width && game.ball.x + game.ball.size > game.leftPaddle.x &&
+        game.ball.y < game.leftPaddle.y + game.leftPaddle.height && game.ball.y + game.ball.size > game.leftPaddle.y) {
+      game.ball.speedX *= -1;
+      playBounceSound();
+      game.leftPaddle.hitCount++;  // Increment hit count
+    }
+    if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width && game.ball.x + game.ball.size > game.rightPaddle.x &&
+        game.ball.y < game.rightPaddle.y + game.rightPaddle.height && game.ball.y + game.ball.size > game.rightPaddle.y) {
+      game.ball.speedX *= -1;
+      playBounceSound();
+      game.rightPaddle.hitCount++;  // Increment hit count
+    }
+
+    if (game.ball.x <= BORDER_WIDTH) {
+      game.leftPaddle.lives--;  // Left paddle loses a life
+      if (game.leftPaddle.lives <= 0) {
         game.leftPaddle.alive = false;
         game.gameOver = true;
+      } else {
+        game.ball.reset();
       }
-      game.lasers.splice(i, 1);
     }
-  }
+    if (game.ball.x + game.ball.size >= WINDOW_WIDTH - BORDER_WIDTH) {
+      game.rightPaddle.lives--;  // Right paddle loses a life
+      if (game.rightPaddle.lives <= 0) {
+        game.rightPaddle.alive = false;
+        game.gameOver = true;
+      } else {
+        game.ball.reset();
+      }
+    }
 
-  if (game.leftPaddle.alive) game.ball.move();
+    ctx.fillStyle = BLACK;
+    ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+    drawBorder();
+    if (game.leftPaddle.alive) game.leftPaddle.draw();
+    if (game.rightPaddle.alive) game.rightPaddle.draw();
+    game.ball.draw();
+    game.lasers.forEach(laser => laser.draw());
 
-  if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width && game.ball.x + game.ball.size > game.leftPaddle.x &&
-      game.ball.y < game.leftPaddle.y + game.leftPaddle.height && game.ball.y + game.ball.size > game.leftPaddle.y) {
-    game.ball.speedX *= -1;
-    playBounceSound();
-  }
-  if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width && game.ball.x + game.ball.size > game.rightPaddle.x &&
-      game.ball.y < game.rightPaddle.y + game.rightPaddle.height && game.ball.y + game.ball.size > game.rightPaddle.y) {
-    game.ball.speedX *= -1;
-    playBounceSound();
-  }
+    // Display lives for both paddles
+    ctx.fillStyle = WHITE;
+    ctx.font = "24px sans-serif";
+    ctx.fillText("Lives: " + game.leftPaddle.lives, WINDOW_WIDTH/4, 60);
+    ctx.fillText("Lives: " + game.rightPaddle.lives, 3*WINDOW_WIDTH/4, 60);
 
-  if (game.ball.x <= BORDER_WIDTH) {
-    game.rightPaddle.score++;
-    playPointSound();
-    game.ball.reset();
-  }
-  if (game.ball.x + game.ball.size >= WINDOW_WIDTH - BORDER_WIDTH) {
-    game.leftPaddle.score++;
-    playPointSound();
-    game.ball.reset();
-  }
+    // Display hit counts
+    ctx.fillText("Hits: " + game.leftPaddle.hitCount, WINDOW_WIDTH/4, 90);
+    ctx.fillText("Hits: " + game.rightPaddle.hitCount, 3*WINDOW_WIDTH/4, 90);
 
-  if (game.leftPaddle.score >= WINNING_SCORE || game.rightPaddle.score >= WINNING_SCORE)
+    // Display shields
+    ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 120);
+    ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 120);
+
+    if (gameMode === "ONE_PLAYER") {
+      let diffStr = difficulty === "AI_EASY" ? "Easy" : difficulty === "AI_MEDIUM" ? "Medium" : "Hard";
+      ctx.fillText("Difficulty: " + diffStr, 10, 30);
+    }
+  } else {
     game.gameOver = true;
-
-  ctx.fillStyle = BLACK;
-  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  drawBorder();
-  if (game.leftPaddle.alive) game.leftPaddle.draw();
-  if (game.rightPaddle.alive) game.rightPaddle.draw();
-  game.ball.draw();
-  game.lasers.forEach(laser => laser.draw());
-
-  ctx.fillStyle = WHITE;
-  ctx.font = "36px sans-serif";
-  ctx.fillText(game.leftPaddle.score, WINDOW_WIDTH/4, 60);
-  ctx.fillText(game.rightPaddle.score, 3*WINDOW_WIDTH/4, 60);
-  ctx.font = "24px sans-serif";
-  ctx.fillText("HP: " + game.leftPaddle.health, WINDOW_WIDTH/4, 90);
-  ctx.fillText("HP: " + game.rightPaddle.health, 3*WINDOW_WIDTH/4, 90);
-  ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 120);
-  ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 120);
-  if (gameMode === "ONE_PLAYER") {
-    let diffStr = difficulty === "AI_EASY" ? "Easy" : difficulty === "AI_MEDIUM" ? "Medium" : "Hard";
-    ctx.fillText("Difficulty: " + diffStr, 10, 30);
   }
 }
 
@@ -502,7 +530,7 @@ function gameLoop(timestamp) {
     else {
       ctx.fillStyle = BLACK;
       ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-      let winner = (game.leftPaddle.score >= WINNING_SCORE || !game.rightPaddle.alive) ? "1" : "2";
+      let winner = (game.leftPaddle.lives > 0) ? "1" : "2";
       showWinner(winner);
     }
   }
