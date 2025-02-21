@@ -237,10 +237,23 @@ function drawBorder() {
 
 // Game State Variables
 let game;
-let currentScreen = "splash";
+let currentScreen = "preSplash";
 let onePlayerMode = false;
 let screenHistory = []; // Stack to keep track of screen history
 let countdownStartTime = null; // Track countdown start time
+
+// Pre-splash Screen
+function showPreSplashScreen() {
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  const img = new Image();
+  img.src = "/splash.webp"; // Update with your image path
+
+  img.onload = function() {
+    ctx.drawImage(img, (WINDOW_WIDTH - img.width) / 2, (WINDOW_HEIGHT - img.height) / 2);
+  };
+}
 
 // Splash Screen
 function showSplashScreen() {
@@ -684,7 +697,9 @@ function showGameOver() {
 
 // Main Game Loop
 function gameLoop() {
-  if (currentScreen === "splash") {
+  if (currentScreen === "preSplash") {
+    showPreSplashScreen();
+  } else if (currentScreen === "splash") {
     showSplashScreen();
   } else if (currentScreen === "modeSelect") {
     showModeSelect();
@@ -709,7 +724,9 @@ let keysPressed = {};
 document.addEventListener("keydown", (e) => {
   keysPressed[e.key] = true;
   
-  if (e.key.toLowerCase() === "b" && screenHistory.length > 0) {
+  if (currentScreen === "preSplash") {
+    currentScreen = "splash";
+  } else if (e.key.toLowerCase() === "b" && screenHistory.length > 0) {
     currentScreen = screenHistory.pop();
   } else {
     if (currentScreen === "splash") {
