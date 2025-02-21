@@ -4,8 +4,21 @@
   <meta charset="UTF-8">
   <title>Laser Pong: Zombie Vampires</title>
   <style>
-    body { margin: 0; background: black; }
-    canvas { display: block; margin: auto; background: black; }
+    body { 
+      margin: 0; 
+      background: black; 
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    canvas { 
+      display: block; 
+      background: black;
+      max-width: 100%;
+      max-height: 100vh;
+    }
   </style>
 </head>
 <body>
@@ -46,9 +59,23 @@ function resizeCanvas() {
   ctx = canvas.getContext("2d");
 }
 
-// Call resizeCanvas on window resize
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas(); // Initial call to set up the canvas size
+// Call resizeCanvas initially to set up the canvas size
+resizeCanvas();
+
+// Function to handle window resize with debouncing
+let resizeTimeout;
+window.addEventListener('resize', function() {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(function() {
+    resizeCanvas();
+    if (game) {
+      // Adjust paddle and ball positions after resize
+      game.leftPaddle.x = 50;
+      game.rightPaddle.x = WINDOW_WIDTH - 50 - PADDLE_WIDTH;
+      game.ball.reset();
+    }
+  }, 100);
+});
 
 // Player-specific constants
 const PLAYER_LASER_SPEED = 12;
@@ -213,12 +240,17 @@ let onePlayerMode = false;
 function showSplashScreen() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  // Dynamic font sizes based on canvas size
+  const titleFontSize = Math.min(WINDOW_WIDTH * 0.05, 50); // Max 50px
+  const textFontSize = Math.min(WINDOW_WIDTH * 0.02, 24);  // Max 24px
+
   ctx.fillStyle = "white";
-  ctx.font = "50px sans-serif";
+  ctx.font = `${titleFontSize}px sans-serif`;
   let title = `Laser Pong: Zombie Vampires v.${VERSION}`;
-  ctx.fillText(title, (WINDOW_WIDTH - ctx.measureText(title).width)/2, 80);
-  
-  ctx.font = "24px sans-serif";
+  ctx.fillText(title, (WINDOW_WIDTH - ctx.measureText(title).width) / 2, titleFontSize + 20);
+
+  ctx.font = `${textFontSize}px sans-serif`;
   let instructions = [
     "Controls:",
     "Red Paddle (Player 1 - Left): W (up), S (down), A (shoot laser), Z (shield)",
@@ -235,10 +267,11 @@ function showSplashScreen() {
     "",
     "Press any key to continue..."
   ];
-  let startY = 130;
+
+  let startY = titleFontSize + 40;
   instructions.forEach(line => {
-    ctx.fillText(line, (WINDOW_WIDTH - ctx.measureText(line).width)/2, startY);
-    startY += 30;
+    ctx.fillText(line, (WINDOW_WIDTH - ctx.measureText(line).width) / 2, startY);
+    startY += textFontSize + 5; // Add some spacing between lines
   });
 }
 
@@ -658,6 +691,7 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("keyup", (e) => { keysPressed[e.key] = false; });
 
+// Start the game loop
 requestAnimationFrame(gameLoop);
 </script>
 </body>
