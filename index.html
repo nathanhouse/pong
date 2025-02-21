@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Laser Pong: Zombie Vampires</title>
+  <title>Laser Pong: Zombie Vampires v.0.7.1</title>
   <style>
     body { margin: 0; background: black; }
     canvas { display: block; margin: auto; background: black; }
@@ -19,20 +19,28 @@ const PADDLE_HEIGHT = 120;
 const BALL_SIZE = 50;
 const PADDLE_SPEED = 15;
 const BALL_SPEED = 4;
-const LASER_SPEED = 8;
-const LASER_WIDTH = 20;
+const LASER_SPEED = 8;  
+const LASER_WIDTH = 20; 
 const LASER_HEIGHT = 5;
-const WINNING_SCORE = 10;
 const LASER_COOLDOWN = 500;
-const PADDLE_HEALTH = 10;
-const WHITE = "white";
-const BLACK = "black";
-const RED = "red";
-const BLUE = "blue";
 const BORDER_WIDTH = 10;
 const SHIELD_DURATION = 2000;
 const SHIELD_RADIUS = 50;
-const VERSION = "0.02";  // Beta version number
+const GAME_DURATION = 60000; // 60 seconds
+
+// Scoring values
+const SCORE_BAT_BOUNCE   = 2; // for ball bouncing off your paddle
+const SCORE_LASER_PADDLE = 3; // for laser hitting opponent's paddle
+const SCORE_BALL_PAST    = 5; // for ball passing the opponent
+const SCORE_LASER_BALL   = 1; // for laser hitting the ball
+
+let VERSION = "0.7.1";
+
+// AI speeds based on difficulty: 1 - Easy, 2 - Medium, 3 - Hard
+const AI_SPEEDS = {1: 4, 2: 6, 3: 8};
+
+// Global variable to hold selected AI level for one-player mode
+let selectedAiLevel = 2;
 
 // Canvas Setup
 const canvas = document.getElementById("gameCanvas");
@@ -40,7 +48,6 @@ const ctx = canvas.getContext("2d");
 
 // Audio Setup
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
 function playTone(frequency, duration) {
   const oscillator = audioCtx.createOscillator();
   const gainNode = audioCtx.createGain();
@@ -52,12 +59,9 @@ function playTone(frequency, duration) {
   oscillator.start(audioCtx.currentTime);
   oscillator.stop(audioCtx.currentTime + duration);
 }
-
 function playLaserSound() { playTone(880, 0.1); }
-function playExplosionSound() { playTone(100, 0.2); }
 function playBounceSound() { playTone(440, 0.1); }
 function playHitSound() { playTone(200, 0.1); }
-function playPointSound() { playTone(1000, 0.1); }
 
 // Game Classes
 class Laser {
@@ -66,7 +70,7 @@ class Laser {
     this.y = y;
     this.width = LASER_WIDTH;
     this.height = LASER_HEIGHT;
-    this.direction = direction; // 1 for right, -1 for left
+    this.direction = direction; // 1: right, -1: left
     this.speed = LASER_SPEED * direction;
   }
   move() { this.x += this.speed; }
@@ -84,454 +88,443 @@ class Paddle {
     this.height = PADDLE_HEIGHT;
     this.score = 0;
     this.color = color;
-    this.alive = true;
-    this.health = PADDLE_HEALTH;
     this.shieldsRemaining = 5;
     this.shieldActive = false;
     this.shieldStartTime = 0;
-    this.lives = 3;  // Starting lives
-    this.hitCount = 0;  // Track ball hits
-    this.totalScore = 0;  // Total score calculation
   }
   move(up) {
     if (up && this.y > BORDER_WIDTH) this.y -= PADDLE_SPEED;
-    if (!up && (this.y + this.height) < (WINDOW_HEIGHT - BORDER_WIDTH)) this.y += PADDLE_SPEED;
+    if (!up && this.y + this.height < WINDOW_HEIGHT - BORDER_WIDTH) this.y += PADDLE_SPEED;
   }
   draw() {
-    if (this.alive) {
-      ctx.fillStyle = this.color;
-      ctx.fillRect(this.x, this.y, this.width, this.height);
-      if (this.shieldActive) {
-        ctx.beginPath();
-        ctx.arc(this.x + this.width/2, this.y + this.height/2, SHIELD_RADIUS, 0, Math.PI*2);
-        ctx.strokeStyle = "lime";
-        ctx.stroke();
-      }
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+    if (this.shieldActive) {
+      ctx.beginPath();
+      ctx.arc(this.x + this.width/2, this.y + this.height/2, SHIELD_RADIUS, 0, Math.PI * 2);
+      ctx.strokeStyle = "lime";
+      ctx.stroke();
     }
   }
   activateShield() {
-    if (this.shieldsRemaining > 0) {
+    if (this.shieldsRemaining > 0 && !this.shieldActive) {
       this.shieldsRemaining--;
       this.shieldActive = true;
       this.shieldStartTime = Date.now();
     }
   }
-  calculateTotalScore() {
-    const pointsPerHit = 10;
-    const penaltyPerLifeLost = -50;
-    const bonusPerLifeRemaining = 100;
-    const livesLost = 3 - this.lives;  // Assuming starting lives are 3
-    this.totalScore = (this.hitCount * pointsPerHit) + (livesLost * penaltyPerLifeLost) + (this.lives * bonusPerLifeRemaining);
-  }
 }
 
 class Ball {
-  constructor() { this.reset(); }
+  constructor() {
+    this.explode = false;
+    this.reset();
+  }
   reset() {
     this.x = WINDOW_WIDTH/2 - BALL_SIZE/2;
     this.y = WINDOW_HEIGHT/2 - BALL_SIZE/2;
     this.size = BALL_SIZE;
+    this.explode = false;
+    // Random initial direction
     this.speedX = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
     this.speedY = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
   }
   move() {
-    this.x += this.speedX;
-    this.y += this.speedY;
-    if (this.y <= BORDER_WIDTH || this.y + this.size >= WINDOW_HEIGHT - BORDER_WIDTH) {
-      this.speedY *= -1;
-      playBounceSound();
+    if (!this.explode) {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      if (this.y <= BORDER_WIDTH || this.y + this.size >= WINDOW_HEIGHT - BORDER_WIDTH) {
+        this.speedY *= -1;
+        playBounceSound();
+      }
     }
   }
   draw() {
-    ctx.fillStyle = WHITE;
-    ctx.beginPath();
-    ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size/2, 0, Math.PI*2);
-    ctx.fill();
-    let eyeRadius = BALL_SIZE / 6;
-    let leftEyeX = this.x + this.size/2 - BALL_SIZE/4;
-    let leftEyeY = this.y + this.size/2 - BALL_SIZE/8;
-    let rightEyeX = this.x + this.size/2 + BALL_SIZE/4;
-    let rightEyeY = this.y + this.size/2 - BALL_SIZE/8;
-    ctx.fillStyle = BLACK;
-    ctx.beginPath();
-    ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(rightEyeX, rightEyeY, eyeRadius, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(this.x + this.size/2, this.y + this.size/2);
-    ctx.lineTo(this.x + this.size/2 - BALL_SIZE/8, this.y + this.size/2 + BALL_SIZE/8);
-    ctx.lineTo(this.x + this.size/2 + BALL_SIZE/8, this.y + this.size/2 + BALL_SIZE/8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(this.x + this.size/2 - BALL_SIZE/3, this.y + this.size/2 + BALL_SIZE/4);
-    ctx.lineTo(this.x + this.size/2, this.y + this.size/2 + BALL_SIZE/3);
-    ctx.lineTo(this.x + this.size/2 + BALL_SIZE/3, this.y + this.size/2 + BALL_SIZE/4);
-    ctx.strokeStyle = BLACK;
-    ctx.stroke();
+    if (this.explode) {
+      // Explosion effect: a bright orange circle
+      ctx.fillStyle = "orange";
+      ctx.beginPath();
+      ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size/2, 0, Math.PI*2);
+      ctx.fill();
+      // Simple skull-like eyes
+      let eyeRadius = this.size/6;
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(this.x + this.size/2 - this.size/4, this.y + this.size/2 - this.size/8, eyeRadius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(this.x + this.size/2 + this.size/4, this.y + this.size/2 - this.size/8, eyeRadius, 0, Math.PI*2);
+      ctx.fill();
+    }
   }
 }
 
 // Helper Functions
 function drawBorder() {
-  ctx.fillStyle = WHITE;
+  ctx.fillStyle = "white";
   ctx.fillRect(0, 0, WINDOW_WIDTH, BORDER_WIDTH);
   ctx.fillRect(0, WINDOW_HEIGHT - BORDER_WIDTH, WINDOW_WIDTH, BORDER_WIDTH);
 }
 
-function showWinner(winner) {
-  ctx.fillStyle = WHITE;
-  ctx.font = "60px sans-serif";
-  let colorText = winner === "1" ? "Red" : "Blue";
-  let text = colorText + " Wins!";
-  let textWidth = ctx.measureText(text).width;
-  ctx.fillText(text, (WINDOW_WIDTH - textWidth) / 2, WINDOW_HEIGHT/2 - 50);
-  ctx.font = "40px sans-serif";
-  let instruction = "Press SPACE to restart or M for menu";
-  let instWidth = ctx.measureText(instruction).width;
-  ctx.fillText(instruction, (WINDOW_WIDTH - instWidth) / 2, WINDOW_HEIGHT/2 + 50);
-}
+// Game State Variables
+let game; // holds current game session info
+// Screen states: "splash", "modeSelect", "difficultySelect", "colorSelect", "game"
+let currentScreen = "splash";
+let onePlayerMode = false; // true for one-player vs AI, false for two-player
 
-// UI Screens
+// Splash Screen: shows title, controls, and scoring explanation
 function showSplashScreen() {
-  ctx.fillStyle = BLACK;
+  ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = WHITE;
+  ctx.fillStyle = "white";
+  ctx.font = "50px sans-serif";
+  let title = "Laser Pong: Zombie Vampires v." + VERSION;
+  ctx.fillText(title, (WINDOW_WIDTH - ctx.measureText(title).width)/2, 80);
+  
+  ctx.font = "24px sans-serif";
+  let instructions = [
+    "Controls:",
+    "Red Paddle (Player 1 - Left): W (up), S (down), A (shoot laser), Z (shield)",
+    "Blue Paddle (Player 2 - Right): Up (up), Down (down), Left (shoot laser), Right (shield)",
+    "In One Player mode, you'll face an AI.",
+    "",
+    "Scoring:",
+    " • Bounce ball off your paddle: +2 points",
+    " • Laser hitting opponent's paddle: +3 points",
+    " • Laser hitting the ball: +1 point (ball explodes and resets)",
+    " • Ball passing the opponent: +5 points",
+    "",
+    "Game lasts 60 seconds. Highest score wins!",
+    "",
+    "Press any key to continue..."
+  ];
+  let startY = 130;
+  instructions.forEach(line => {
+    ctx.fillText(line, (WINDOW_WIDTH - ctx.measureText(line).width)/2, startY);
+    startY += 30;
+  });
+}
+
+// Mode Selection Screen
+function showModeSelect() {
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = "white";
   ctx.font = "40px sans-serif";
-  let title = "Laser Pong: Zombie Vampires";
-  let titleWidth = ctx.measureText(title).width;
-  ctx.fillText(title, (WINDOW_WIDTH - titleWidth)/2, 30);
-  ctx.font = "20px monospace";
-  let vampireArt = [
-    "   (  )   ",
-    "  (    )  ",
-    "   (__)   "
-  ];
-  let yOffset = 80;
-  vampireArt.forEach(line => {
-    let lineWidth = ctx.measureText(line).width;
-    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, yOffset);
-    yOffset += 25;
-  });
+  let text = "Select Game Mode";
+  ctx.fillText(text, (WINDOW_WIDTH - ctx.measureText(text).width)/2, 200);
+  
+  ctx.font = "30px sans-serif";
+  let option1 = "1 - One Player (vs AI)";
+  let option2 = "2 - Two Player";
+  ctx.fillText(option1, (WINDOW_WIDTH - ctx.measureText(option1).width)/2, 300);
+  ctx.fillText(option2, (WINDOW_WIDTH - ctx.measureText(option2).width)/2, 350);
   ctx.font = "24px sans-serif";
-  let versionText = `Version: ${VERSION} (Beta)`;
-  let versionWidth = ctx.measureText(versionText).width;
-  ctx.fillText(versionText, (WINDOW_WIDTH - versionWidth)/2, yOffset += 20);
-  let controls = [
-    "Red Paddle (Left): W (up), S (down), A (laser), Z (shield)",
-    "Blue Paddle (Right): Up (up), Down (down), Left (laser), Right (shield)",
-    "Press B to return to menu, SPACE to restart"
-  ];
-  yOffset += 20;
-  controls.forEach(line => {
-    let lineWidth = ctx.measureText(line).width;
-    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, yOffset);
-    yOffset += 25;
-  });
+  let promptText = "Press 1 or 2 to select";
+  ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
+}
+
+// Difficulty Selection Screen (for One Player)
+function showDifficultySelect() {
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = "white";
+  ctx.font = "40px sans-serif";
+  let text = "Select AI Difficulty";
+  ctx.fillText(text, (WINDOW_WIDTH - ctx.measureText(text).width)/2, 200);
+  
+  ctx.font = "30px sans-serif";
+  let easy = "1 - Easy";
+  let medium = "2 - Medium";
+  let hard = "3 - Hard";
+  ctx.fillText(easy, (WINDOW_WIDTH - ctx.measureText(easy).width)/2, 300);
+  ctx.fillText(medium, (WINDOW_WIDTH - ctx.measureText(medium).width)/2, 350);
+  ctx.fillText(hard, (WINDOW_WIDTH - ctx.measureText(hard).width)/2, 400);
   ctx.font = "24px sans-serif";
-  let cont = "Press any key to continue";
-  let contWidth = ctx.measureText(cont).width;
-  ctx.fillText(cont, (WINDOW_WIDTH - contWidth)/2, WINDOW_HEIGHT - 40);
+  let promptText = "Press 1, 2, or 3 to select";
+  ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 480);
 }
 
-function selectGameMode() {
-  ctx.fillStyle = BLACK;
+// Color Selection Screen (for One Player)
+function showColorSelect() {
+  ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = WHITE;
-  ctx.font = "60px sans-serif";
-  let title = "Laser Pong: Zombie Vampires";
-  let titleWidth = ctx.measureText(title).width;
-  ctx.fillText(title, (WINDOW_WIDTH - titleWidth)/2, 50);
-  ctx.font = "36px sans-serif";
-  let options = [
-    "Press 1 for One Player (Play against AI)",
-    "Press 2 for Two Player (Local Multiplayer)"
-  ];
-  options.forEach((opt, index) => {
-    let optWidth = ctx.measureText(opt).width;
-    ctx.fillText(opt, (WINDOW_WIDTH - optWidth)/2, 150 + index * 50);
-  });
+  ctx.fillStyle = "white";
+  ctx.font = "40px sans-serif";
+  let text = "Select Your Color";
+  ctx.fillText(text, (WINDOW_WIDTH - ctx.measureText(text).width)/2, 200);
+  
+  ctx.font = "30px sans-serif";
+  let redOption = "1 - Red (Left)";
+  let blueOption = "2 - Blue (Right)";
+  ctx.fillText(redOption, (WINDOW_WIDTH - ctx.measureText(redOption).width)/2, 300);
+  ctx.fillText(blueOption, (WINDOW_WIDTH - ctx.measureText(blueOption).width)/2, 350);
+  ctx.font = "24px sans-serif";
+  let promptText = "Press 1 or 2 to select";
+  ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
 }
 
-function selectColor() {
-  ctx.fillStyle = BLACK;
-  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = WHITE;
-  ctx.font = "36px sans-serif";
-  let prompts = [
-    "Press 1 for Red (Left Paddle)",
-    "Press 2 for Blue (Right Paddle)"
-  ];
-  prompts.forEach((line, index) => {
-    let lineWidth = ctx.measureText(line).width;
-    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, 150 + index * 50);
-  });
-}
-
-function selectDifficulty() {
-  ctx.fillStyle = BLACK;
-  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = WHITE;
-  ctx.font = "36px sans-serif";
-  let diffs = [
-    "Press 1 for Easy AI Difficulty",
-    "Press 2 for Medium AI Difficulty",
-    "Press 3 for Hard AI Difficulty"
-  ];
-  diffs.forEach((line, index) => {
-    let lineWidth = ctx.measureText(line).width;
-    ctx.fillText(line, (WINDOW_WIDTH - lineWidth)/2, 150 + index * 50);
-  });
-}
-
-// AI Logic
-function aiMove(paddle, ball, difficulty, currentTime, lastShot) {
-  const factors = {
-    "AI_EASY": { accuracy: 0.3, cooldownFactor: 1.0 },
-    "AI_MEDIUM": { accuracy: 0.8, cooldownFactor: 1.0 },
-    "AI_HARD": { accuracy: 1.0, cooldownFactor: 0.5 }
-  };
-  let settings = factors[difficulty];
-  let accuracy = settings.accuracy;
-  let cooldownFactor = settings.cooldownFactor;
-  if (Math.random() < accuracy) {
-    if (ball.y + ball.size/2 > paddle.y + PADDLE_HEIGHT/4) {
-      paddle.move(false);
-    } else if (ball.y + ball.size/2 < paddle.y + PADDLE_HEIGHT/4) {
-      paddle.move(true);
-    }
-  }
-  if (currentTime - lastShot >= LASER_COOLDOWN * cooldownFactor) {
-    if (Math.abs(ball.y + ball.size/2 - (paddle.y + paddle.height/2)) < PADDLE_HEIGHT/2) {
-      return true;
-    }
-    if (difficulty === "AI_HARD") {
-      if (paddle.x < WINDOW_WIDTH/2 && ball.speedX < 0) return true;
-      if (paddle.x >= WINDOW_WIDTH/2 && ball.speedX > 0) return true;
-    }
-  }
-  return false;
-}
-
-// Game Session
-let game;
-function startGame() {
+// Start Game Session; if one-player, humanPlayer is "red" or "blue"
+function startGame(aiLevel = 2, humanPlayer = null) {
   game = {
-    leftPaddle: new Paddle(50, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, RED),
-    rightPaddle: new Paddle(WINDOW_WIDTH - 50 - PADDLE_WIDTH, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, BLUE),
+    onePlayer: onePlayerMode,
+    aiLevel: aiLevel, // only relevant for one-player mode
+    humanPlayer: humanPlayer, // "red" or "blue" if one-player; ignored for two-player
+    leftPaddle: new Paddle(50, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, "red"),
+    rightPaddle: new Paddle(WINDOW_WIDTH - 50 - PADDLE_WIDTH, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, "blue"),
     ball: new Ball(),
     lasers: [],
     lastLeftShot: 0,
     lastRightShot: 0,
-    gameOver: false,
-    isTwoPlayer: (gameMode === "TWO_PLAYER"),
-    aiLeft: false,
-    aiRight: false,
-    countdown: 5,
-    countdownStart: Date.now()
+    startTime: Date.now(),
+    gameOver: false
   };
-  if (gameMode === "ONE_PLAYER") {
-    game.aiLeft = (aiSide === "red");
-    game.aiRight = (aiSide === "blue");
-  }
 }
 
+// AI update for right paddle (when human is red)
+function updateAIPaddle() {
+  let aiSpeed = AI_SPEEDS[game.aiLevel] || AI_SPEEDS[2];
+  let targetY = game.ball.y + game.ball.size/2 - game.rightPaddle.height/2;
+  if (game.rightPaddle.y < targetY) {
+    game.rightPaddle.y += aiSpeed;
+  } else if (game.rightPaddle.y > targetY) {
+    game.rightPaddle.y -= aiSpeed;
+  }
+  if (game.rightPaddle.y < BORDER_WIDTH) game.rightPaddle.y = BORDER_WIDTH;
+  if (game.rightPaddle.y + game.rightPaddle.height > WINDOW_HEIGHT - BORDER_WIDTH)
+    game.rightPaddle.y = WINDOW_HEIGHT - BORDER_WIDTH - game.rightPaddle.height;
+}
+
+// AI update for left paddle (when human is blue)
+function updateAIPaddleLeft() {
+  let aiSpeed = AI_SPEEDS[game.aiLevel] || AI_SPEEDS[2];
+  let targetY = game.ball.y + game.ball.size/2 - game.leftPaddle.height/2;
+  if (game.leftPaddle.y < targetY) {
+    game.leftPaddle.y += aiSpeed;
+  } else if (game.leftPaddle.y > targetY) {
+    game.leftPaddle.y -= aiSpeed;
+  }
+  if (game.leftPaddle.y < BORDER_WIDTH) game.leftPaddle.y = BORDER_WIDTH;
+  if (game.leftPaddle.y + game.leftPaddle.height > WINDOW_HEIGHT - BORDER_WIDTH)
+    game.leftPaddle.y = WINDOW_HEIGHT - BORDER_WIDTH - game.leftPaddle.height;
+}
+
+// Main Game Update
 function updateGame() {
   let currentTime = Date.now();
-  if (game.countdown > 0) {
-    if (currentTime - game.countdownStart >= 1000) {
-      game.countdown--;
-      game.countdownStart = currentTime;
-    }
-    ctx.fillStyle = BLACK;
-    ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-    ctx.fillStyle = WHITE;
-    ctx.font = "100px sans-serif";
-    let text = game.countdown > 0 ? game.countdown : "Go!";
-    let textWidth = ctx.measureText(text).width;
-    ctx.fillText(text, (WINDOW_WIDTH - textWidth)/2, WINDOW_HEIGHT/2);
-    return;
+  if (currentTime - game.startTime >= GAME_DURATION) {
+    game.gameOver = true;
   }
-
-  if (game.leftPaddle.alive && game.rightPaddle.alive) {
-    if (game.isTwoPlayer || !game.aiLeft) {
+  
+  // One-Player Mode Controls
+  if (game.onePlayer) {
+    if (game.humanPlayer === "red") {
       if (keysPressed["w"]) game.leftPaddle.move(true);
       if (keysPressed["s"]) game.leftPaddle.move(false);
-    } else {
-      if (aiMove(game.leftPaddle, game.ball, difficulty, currentTime, game.lastLeftShot)) {
+      if (keysPressed["z"]) game.leftPaddle.activateShield();
+      if (keysPressed["a"] && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
         game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
         playLaserSound();
         game.lastLeftShot = currentTime;
       }
-    }
-    if (game.isTwoPlayer || !game.aiRight) {
+      updateAIPaddle();
+      if (currentTime - game.lastRightShot >= LASER_COOLDOWN) {
+        if (game.ball.speedX > 0 && game.ball.x > WINDOW_WIDTH/2) {
+          game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
+          playLaserSound();
+          game.lastRightShot = currentTime;
+        }
+      }
+    } else if (game.humanPlayer === "blue") {
       if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
       if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
-    } else {
-      if (aiMove(game.rightPaddle, game.ball, difficulty, currentTime, game.lastRightShot)) {
+      if (keysPressed["ArrowRight"]) game.rightPaddle.activateShield();
+      if (keysPressed["ArrowLeft"] && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
         game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
         playLaserSound();
         game.lastRightShot = currentTime;
       }
+      updateAIPaddleLeft();
+      if (currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
+        if (game.ball.speedX < 0 && game.ball.x < WINDOW_WIDTH/2) {
+          game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
+          playLaserSound();
+          game.lastLeftShot = currentTime;
+        }
+      }
     }
-
-    if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["a"] && game.leftPaddle.alive && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
+  } else {
+    // Two-Player Mode Controls
+    if (keysPressed["w"]) game.leftPaddle.move(true);
+    if (keysPressed["s"]) game.leftPaddle.move(false);
+    if (keysPressed["z"]) game.leftPaddle.activateShield();
+    if (keysPressed["a"] && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
       game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
       playLaserSound();
       game.lastLeftShot = currentTime;
     }
-    if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowLeft"] && game.rightPaddle.alive && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
+    if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
+    if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
+    if (keysPressed["ArrowRight"]) game.rightPaddle.activateShield();
+    if (keysPressed["ArrowLeft"] && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
       game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
       playLaserSound();
       game.lastRightShot = currentTime;
     }
-    if ((game.isTwoPlayer || !game.aiLeft) && keysPressed["z"] && !game.leftPaddle.shieldActive) {
-      game.leftPaddle.activateShield();
-    }
-    if ((game.isTwoPlayer || !game.aiRight) && keysPressed["ArrowRight"] && !game.rightPaddle.shieldActive) {
-      game.rightPaddle.activateShield();
-    }
-
-    if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
-      game.leftPaddle.shieldActive = false;
-    if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
-      game.rightPaddle.shieldActive = false;
-
-    for (let i = game.lasers.length - 1; i >= 0; i--) {
-      let laser = game.lasers[i];
-      laser.move();
-      if (laser.x < 0 || laser.x > WINDOW_WIDTH) {
-        game.lasers.splice(i, 1);
-        continue;
-      }
-      if (laser.x < game.ball.x + game.ball.size && laser.x + laser.width > game.ball.x &&
-          laser.y < game.ball.y + game.ball.size && laser.y + laser.height > game.ball.y) {
-        playExplosionSound();
-        if (laser.direction > 0) game.leftPaddle.score++;
-        else game.rightPaddle.score++;
-        game.ball.reset();
-        game.lasers.splice(i, 1);
-        break;
-      }
-      if (laser.direction > 0 && game.rightPaddle.alive &&
-          laser.x < game.rightPaddle.x + game.rightPaddle.width && laser.x + laser.width > game.rightPaddle.x &&
-          laser.y < game.rightPaddle.y + game.rightPaddle.height && laser.y + laser.height > game.rightPaddle.y &&
-          !game.rightPaddle.shieldActive) {
-        playHitSound();
-        game.rightPaddle.health--;
-        if (game.rightPaddle.health <= 0) {
-          game.rightPaddle.alive = false;
-          game.gameOver = true;
-        }
-        game.lasers.splice(i, 1);
-      } else if (laser.direction < 0 && game.leftPaddle.alive &&
-                 laser.x < game.leftPaddle.x + game.leftPaddle.width && laser.x + laser.width > game.leftPaddle.x &&
-                 laser.y < game.leftPaddle.y + game.leftPaddle.height && laser.y + laser.height > game.leftPaddle.y &&
-                 !game.leftPaddle.shieldActive) {
-        playHitSound();
-        game.leftPaddle.health--;
-        if (game.leftPaddle.health <= 0) {
-          game.leftPaddle.alive = false;
-          game.gameOver = true;
-        }
-        game.lasers.splice(i, 1);
-      }
-    }
-
-    if (game.leftPaddle.alive) game.ball.move();
-
-    if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width && game.ball.x + game.ball.size > game.leftPaddle.x &&
-        game.ball.y < game.leftPaddle.y + game.leftPaddle.height && game.ball.y + game.ball.size > game.leftPaddle.y) {
-      game.ball.speedX *= -1;
-      playBounceSound();
-      game.leftPaddle.hitCount++;  // Increment hit count
-    }
-    if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width && game.ball.x + game.ball.size > game.rightPaddle.x &&
-        game.ball.y < game.rightPaddle.y + game.rightPaddle.height && game.ball.y + game.ball.size > game.rightPaddle.y) {
-      game.ball.speedX *= -1;
-      playBounceSound();
-      game.rightPaddle.hitCount++;  // Increment hit count
-    }
-
-    if (game.ball.x <= BORDER_WIDTH) {
-      game.leftPaddle.lives--;  // Left paddle loses a life
-      if (game.leftPaddle.lives <= 0) {
-        game.leftPaddle.alive = false;
-        game.gameOver = true;
-      } else {
-        game.ball.reset();
-      }
-    }
-    if (game.ball.x + game.ball.size >= WINDOW_WIDTH - BORDER_WIDTH) {
-      game.rightPaddle.lives--;  // Right paddle loses a life
-      if (game.rightPaddle.lives <= 0) {
-        game.rightPaddle.alive = false;
-        game.gameOver = true;
-      } else {
-        game.ball.reset();
-      }
-    }
-
-    ctx.fillStyle = BLACK;
-    ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-    drawBorder();
-    if (game.leftPaddle.alive) game.leftPaddle.draw();
-    if (game.rightPaddle.alive) game.rightPaddle.draw();
-    game.ball.draw();
-    game.lasers.forEach(laser => laser.draw());
-
-    // Display lives for both paddles
-    ctx.fillStyle = WHITE;
-    ctx.font = "24px sans-serif";
-    ctx.fillText("Lives: " + game.leftPaddle.lives, WINDOW_WIDTH/4, 60);
-    ctx.fillText("Lives: " + game.rightPaddle.lives, 3*WINDOW_WIDTH/4, 60);
-
-    // Display hit counts
-    ctx.fillText("Hits: " + game.leftPaddle.hitCount, WINDOW_WIDTH/4, 90);
-    ctx.fillText("Hits: " + game.rightPaddle.hitCount, 3*WINDOW_WIDTH/4, 90);
-
-    // Display shields
-    ctx.fillText("Shields: " + game.leftPaddle.shieldsRemaining, WINDOW_WIDTH/4, 120);
-    ctx.fillText("Shields: " + game.rightPaddle.shieldsRemaining, 3*WINDOW_WIDTH/4, 120);
-
-    if (gameMode === "ONE_PLAYER") {
-      let diffStr = difficulty === "AI_EASY" ? "Easy" : difficulty === "AI_MEDIUM" ? "Medium" : "Hard";
-      ctx.fillText("Difficulty: " + diffStr, 10, 30);
-    }
-  } else {
-    game.gameOver = true;
   }
+  
+  // Deactivate shields after duration
+  if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
+    game.leftPaddle.shieldActive = false;
+  if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
+    game.rightPaddle.shieldActive = false;
+  
+  // Process lasers collisions
+  for (let i = game.lasers.length - 1; i >= 0; i--) {
+    let laser = game.lasers[i];
+    laser.move();
+    if (laser.x < 0 || laser.x > WINDOW_WIDTH) {
+      game.lasers.splice(i, 1);
+      continue;
+    }
+    // Laser hits ball
+    if (laser.x < game.ball.x + game.ball.size &&
+        laser.x + laser.width > game.ball.x &&
+        laser.y < game.ball.y + game.ball.size &&
+        laser.y + laser.height > game.ball.y) {
+      if (laser.direction > 0) {
+        game.leftPaddle.score += SCORE_LASER_BALL;
+      } else {
+        game.rightPaddle.score += SCORE_LASER_BALL;
+      }
+      game.ball.explode = true;
+      setTimeout(() => { game.ball.reset(); }, 200);
+      game.lasers.splice(i, 1);
+      continue;
+    }
+    // Laser hits opponent's paddle
+    if (laser.direction > 0 &&
+       laser.x < game.rightPaddle.x + game.rightPaddle.width &&
+       laser.x + laser.width > game.rightPaddle.x &&
+       laser.y < game.rightPaddle.y + game.rightPaddle.height &&
+       laser.y + laser.height > game.rightPaddle.y) {
+      if (!game.rightPaddle.shieldActive) {
+        game.leftPaddle.score += SCORE_LASER_PADDLE;
+        playHitSound();
+      }
+      game.lasers.splice(i, 1);
+      continue;
+    }
+    if (laser.direction < 0 &&
+       laser.x < game.leftPaddle.x + game.leftPaddle.width &&
+       laser.x + laser.width > game.leftPaddle.x &&
+       laser.y < game.leftPaddle.y + game.leftPaddle.height &&
+       laser.y + laser.height > game.leftPaddle.y) {
+      if (!game.leftPaddle.shieldActive) {
+        game.rightPaddle.score += SCORE_LASER_PADDLE;
+        playHitSound();
+      }
+      game.lasers.splice(i, 1);
+      continue;
+    }
+  }
+  
+  // Move ball and check for paddle collisions (bat bounce)
+  game.ball.move();
+  if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width &&
+      game.ball.x + game.ball.size > game.leftPaddle.x &&
+      game.ball.y < game.leftPaddle.y + game.leftPaddle.height &&
+      game.ball.y + game.ball.size > game.leftPaddle.y &&
+      game.ball.speedX < 0) {
+    game.ball.speedX = Math.abs(game.ball.speedX);
+    game.leftPaddle.score += SCORE_BAT_BOUNCE;
+    game.ball.x = game.leftPaddle.x + game.leftPaddle.width;
+    game.ball.speedY = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
+    playBounceSound();
+  }
+  if (game.ball.x < game.rightPaddle.x + game.rightPaddle.width &&
+      game.ball.x + game.ball.size > game.rightPaddle.x &&
+      game.ball.y < game.rightPaddle.y + game.rightPaddle.height &&
+      game.ball.y + game.ball.size > game.rightPaddle.y &&
+      game.ball.speedX > 0) {
+    game.ball.speedX = -Math.abs(game.ball.speedX);
+    game.rightPaddle.score += SCORE_BAT_BOUNCE;
+    game.ball.x = game.rightPaddle.x - game.ball.size;
+    game.ball.speedY = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
+    playBounceSound();
+  }
+  
+  if (game.ball.x <= BORDER_WIDTH) {
+    game.rightPaddle.score += SCORE_BALL_PAST;
+    game.ball.reset();
+  }
+  if (game.ball.x + game.ball.size >= WINDOW_WIDTH - BORDER_WIDTH) {
+    game.leftPaddle.score += SCORE_BALL_PAST;
+    game.ball.reset();
+  }
+  
+  // Drawing
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  drawBorder();
+  game.leftPaddle.draw();
+  game.rightPaddle.draw();
+  game.ball.draw();
+  game.lasers.forEach(laser => laser.draw());
+  
+  ctx.fillStyle = "white";
+  ctx.font = "24px sans-serif";
+  ctx.fillText("Red Score: " + game.leftPaddle.score, 50, 30);
+  ctx.fillText("Blue Score: " + game.rightPaddle.score, WINDOW_WIDTH - 250, 30);
+  let timeLeft = Math.max(0, GAME_DURATION - (currentTime - game.startTime));
+  ctx.fillText("Time: " + Math.ceil(timeLeft/1000), WINDOW_WIDTH/2 - 30, 30);
 }
 
-// Game Loop and State Management
-let currentScreen = "splash";
-let gameMode = "";
-let aiSide = "";
-let difficulty = "";
-let lastTime = 0;
+// Display Game Over Screen
+function showGameOver() {
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+  ctx.fillStyle = "white";
+  ctx.font = "60px sans-serif";
+  let winnerText = "";
+  if (game.leftPaddle.score > game.rightPaddle.score) {
+    winnerText = "Red Wins!";
+  } else if (game.rightPaddle.score > game.leftPaddle.score) {
+    winnerText = game.onePlayer ? "AI Wins!" : "Blue Wins!";
+  } else {
+    winnerText = "Tie Game!";
+  }
+  ctx.fillText(winnerText, (WINDOW_WIDTH - ctx.measureText(winnerText).width)/2, WINDOW_HEIGHT/2 - 60);
+  
+  ctx.font = "40px sans-serif";
+  let scoreText = "Red: " + game.leftPaddle.score + " | Blue: " + game.rightPaddle.score;
+  ctx.fillText(scoreText, (WINDOW_WIDTH - ctx.measureText(scoreText).width)/2, WINDOW_HEIGHT/2);
+  
+  ctx.font = "30px sans-serif";
+  let instruction = "Press SPACE to restart or M for menu";
+  ctx.fillText(instruction, (WINDOW_WIDTH - ctx.measureText(instruction).width)/2, WINDOW_HEIGHT/2 + 60);
+}
 
-function gameLoop(timestamp) {
-  let deltaTime = timestamp - lastTime;
-  lastTime = timestamp;
+// Main Game Loop
+function gameLoop() {
   if (currentScreen === "splash") {
     showSplashScreen();
-  } else if (currentScreen === "menu") {
-    if (!gameMode) {
-      selectGameMode();
-    } else if (gameMode === "ONE_PLAYER" && !aiSide) {
-      selectColor();
-    } else if (gameMode === "ONE_PLAYER" && aiSide && !difficulty) {
-      selectDifficulty();
-    }
+  } else if (currentScreen === "modeSelect") {
+    showModeSelect();
+  } else if (currentScreen === "difficultySelect") {
+    showDifficultySelect();
+  } else if (currentScreen === "colorSelect") {
+    showColorSelect();
   } else if (currentScreen === "game") {
-    if (!game.gameOver) updateGame(deltaTime);
-    else {
-      ctx.fillStyle = BLACK;
-      ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-      let winner = (game.leftPaddle.lives > 0) ? "1" : "2";
-      showWinner(winner);
+    if (!game.gameOver) {
+      updateGame();
+    } else {
+      showGameOver();
     }
   }
   requestAnimationFrame(gameLoop);
@@ -541,33 +534,48 @@ function gameLoop(timestamp) {
 let keysPressed = {};
 document.addEventListener("keydown", (e) => {
   keysPressed[e.key] = true;
+  
   if (currentScreen === "splash") {
-    currentScreen = "menu";
-  } else if (currentScreen === "menu") {
-    if (!gameMode) {
-      if (e.key === "1") { gameMode = "ONE_PLAYER"; }
-      else if (e.key === "2") { gameMode = "TWO_PLAYER"; currentScreen = "game"; startGame(); }
-    } else if (gameMode === "ONE_PLAYER" && !aiSide) {
-      if (e.key === "1") { aiSide = "blue"; }  // Player chooses red, AI controls blue
-      else if (e.key === "2") { aiSide = "red"; }  // Player chooses blue, AI controls red
-    } else if (gameMode === "ONE_PLAYER" && aiSide && !difficulty) {
-      if (e.key === "1") { difficulty = "AI_EASY"; currentScreen = "game"; startGame(); }
-      else if (e.key === "2") { difficulty = "AI_MEDIUM"; currentScreen = "game"; startGame(); }
-      else if (e.key === "3") { difficulty = "AI_HARD"; currentScreen = "game"; startGame(); }
+    currentScreen = "modeSelect";
+  }
+  else if (currentScreen === "modeSelect") {
+    if (e.key === "1") {
+      onePlayerMode = true;
+      currentScreen = "difficultySelect";
+    } else if (e.key === "2") {
+      onePlayerMode = false;
+      startGame();
+      currentScreen = "game";
     }
-  } else if (currentScreen === "game" && game.gameOver) {
-    if (e.key === " ") startGame();
-    else if (e.key.toLowerCase() === "m") {
+  }
+  else if (currentScreen === "difficultySelect") {
+    if (["1", "2", "3"].includes(e.key)) {
+      selectedAiLevel = parseInt(e.key);
+      currentScreen = "colorSelect";
+    }
+  }
+  else if (currentScreen === "colorSelect") {
+    if (e.key === "1") {
+      startGame(selectedAiLevel, "red");
+      currentScreen = "game";
+    } else if (e.key === "2") {
+      startGame(selectedAiLevel, "blue");
+      currentScreen = "game";
+    }
+  }
+  else if (currentScreen === "game" && game.gameOver) {
+    if (e.key === " ") {
+      if (onePlayerMode) {
+        startGame(selectedAiLevel, game.humanPlayer);
+      } else {
+        startGame();
+      }
+    } else if (e.key.toLowerCase() === "m") {
       currentScreen = "splash";
-      gameMode = "";
-      aiSide = "";
-      difficulty = "";
     }
-  } else if (currentScreen === "game" && e.key.toLowerCase() === "b") {
+  }
+  else if (currentScreen === "game" && e.key.toLowerCase() === "m") {
     currentScreen = "splash";
-    gameMode = "";
-    aiSide = "";
-    difficulty = "";
   }
 });
 document.addEventListener("keyup", (e) => { keysPressed[e.key] = false; });
