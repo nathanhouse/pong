@@ -23,7 +23,7 @@ const LASER_SPEED = 8;
 const LASER_WIDTH = 20; 
 const LASER_HEIGHT = 5;
 const LASER_COOLDOWN = 500;
-const BORDER_WIDTH = 10;
+const BORDER_WIDTH = 1;
 const SHIELD_DURATION = 2000;
 const SHIELD_RADIUS = 50;
 const GAME_DURATION = 60000; // 60 seconds
@@ -493,9 +493,9 @@ function showGameOver() {
   ctx.font = "60px sans-serif";
   let winnerText = "";
   if (game.leftPaddle.score > game.rightPaddle.score) {
-    winnerText = "Red Wins!";
+    winnerText = game.onePlayer && game.humanPlayer === "red" ? "You Win!" : "Red Wins!";
   } else if (game.rightPaddle.score > game.leftPaddle.score) {
-    winnerText = game.onePlayer ? "AI Wins!" : "Blue Wins!";
+    winnerText = game.onePlayer && game.humanPlayer === "blue" ? "You Win!" : "Blue Wins!";
   } else {
     winnerText = "Tie Game!";
   }
