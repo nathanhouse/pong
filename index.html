@@ -235,6 +235,7 @@ function drawBorder() {
 let game;
 let currentScreen = "splash";
 let onePlayerMode = false;
+let screenHistory = []; // Stack to keep track of screen history
 
 // Splash Screen
 function showSplashScreen() {
@@ -646,47 +647,57 @@ let keysPressed = {};
 document.addEventListener("keydown", (e) => {
   keysPressed[e.key] = true;
   
-  if (currentScreen === "splash") {
-    currentScreen = "modeSelect";
-  }
-  else if (currentScreen === "modeSelect") {
-    if (e.key === "1") {
-      onePlayerMode = true;
-      currentScreen = "difficultySelect";
-    } else if (e.key === "2") {
-      onePlayerMode = false;
-      startGame();
-      currentScreen = "game";
+  if (e.key.toLowerCase() === "b" && screenHistory.length > 0) {
+    currentScreen = screenHistory.pop();
+  } else {
+    if (currentScreen === "splash") {
+      screenHistory.push(currentScreen);
+      currentScreen = "modeSelect";
     }
-  }
-  else if (currentScreen === "difficultySelect") {
-    if (["1", "2", "3"].includes(e.key)) {
-      selectedAiLevel = parseInt(e.key);
-      currentScreen = "colorSelect";
-    }
-  }
-  else if (currentScreen === "colorSelect") {
-    if (e.key === "1") {
-      startGame(selectedAiLevel, "red");
-      currentScreen = "game";
-    } else if (e.key === "2") {
-      startGame(selectedAiLevel, "blue");
-      currentScreen = "game";
-    }
-  }
-  else if (currentScreen === "game" && game.gameOver) {
-    if (e.key === " ") {
-      if (onePlayerMode) {
-        startGame(selectedAiLevel, game.humanPlayer);
-      } else {
+    else if (currentScreen === "modeSelect") {
+      if (e.key === "1") {
+        screenHistory.push(currentScreen);
+        onePlayerMode = true;
+        currentScreen = "difficultySelect";
+      } else if (e.key === "2") {
+        screenHistory.push(currentScreen);
+        onePlayerMode = false;
         startGame();
+        currentScreen = "game";
       }
-    } else if (e.key.toLowerCase() === "m") {
+    }
+    else if (currentScreen === "difficultySelect") {
+      if (["1", "2", "3"].includes(e.key)) {
+        screenHistory.push(currentScreen);
+        selectedAiLevel = parseInt(e.key);
+        currentScreen = "colorSelect";
+      }
+    }
+    else if (currentScreen === "colorSelect") {
+      if (e.key === "1") {
+        screenHistory.push(currentScreen);
+        startGame(selectedAiLevel, "red");
+        currentScreen = "game";
+      } else if (e.key === "2") {
+        screenHistory.push(currentScreen);
+        startGame(selectedAiLevel, "blue");
+        currentScreen = "game";
+      }
+    }
+    else if (currentScreen === "game" && game.gameOver) {
+      if (e.key === " ") {
+        if (onePlayerMode) {
+          startGame(selectedAiLevel, game.humanPlayer);
+        } else {
+          startGame();
+        }
+      } else if (e.key.toLowerCase() === "m") {
+        currentScreen = "splash";
+      }
+    }
+    else if (currentScreen === "game" && e.key.toLowerCase() === "m") {
       currentScreen = "splash";
     }
-  }
-  else if (currentScreen === "game" && e.key.toLowerCase() === "m") {
-    currentScreen = "splash";
   }
 });
 document.addEventListener("keyup", (e) => { keysPressed[e.key] = false; });
