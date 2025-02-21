@@ -104,7 +104,7 @@ const SCORE_LASER_PADDLE = 3;
 const SCORE_BALL_PAST = 5;
 const SCORE_LASER_BALL = 1;
 
-let VERSION = "0.8.0";
+let VERSION = "0.9.0";
 const HIGH_SCORE_KEY = "laserPongHighScore";
 let highScore = localStorage.getItem(HIGH_SCORE_KEY) || 0;
 
@@ -133,6 +133,13 @@ function playHitSound() { playTone(200, 0.1); }
 function playExplosionSound() { playTone(120, 0.3); }
 function playPassSound() { playTone(600, 0.2); }
 function playGameOverSound() { playTone(300, 0.5); }
+
+// Add these functions to play countdown sounds
+function playCountdownSound(number) {
+  const frequency = number === "Go" ? 1000 : 500; // Higher pitch for "Go"
+  const duration = 0.2;
+  playTone(frequency, duration);
+}
 
 // Game Classes
 class Laser {
@@ -303,7 +310,7 @@ function showSplashScreen() {
   const textFontSize = Math.min(WINDOW_WIDTH * 0.02, 24);
 
   // Draw title with gradient
-  ctx.font = `bold ${titleFontSize}px sans-serif`;
+  ctx.font = `bold ${titleFontSize}px 'Orbitron', sans-serif`;
   let title = `Laser Pong: Zombie Vampires v.${VERSION}`;
   
   // Create gradient for title
@@ -313,9 +320,15 @@ function showSplashScreen() {
   ctx.fillStyle = gradient;
   ctx.fillText(title, (WINDOW_WIDTH - ctx.measureText(title).width) / 2, titleFontSize + 20);
 
+  // Add "by Brandon and Vincent" text
+  ctx.font = `bold ${textFontSize * 1.5}px 'Orbitron', sans-serif`;
+  ctx.fillStyle = "white";
+  const byText = "by Vincemt and Brandon";
+  ctx.fillText(byText, (WINDOW_WIDTH - ctx.measureText(byText).width) / 2, titleFontSize + 60);
+
   // Instructions with colored sections
-  ctx.font = `${textFontSize}px sans-serif`;
-  let startY = titleFontSize + 60;
+  ctx.font = `${textFontSize}px 'Orbitron', sans-serif`;
+  let startY = titleFontSize + 100;
 
   // Controls section
   ctx.fillStyle = '#33ccff';  // Cyan for headers
@@ -383,7 +396,7 @@ function showSplashScreen() {
   startY += textFontSize + 20;
 
   // Continue prompt with pulsing effect
-  ctx.font = `bold ${textFontSize * 1.2}px sans-serif`;
+  ctx.font = `bold ${textFontSize * 1.2}px 'Orbitron', sans-serif`;
   const promptAlpha = 0.7 + 0.3 * Math.sin(time * 4);  // Faster pulsing
   ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha})`;
   const promptText = "Press Any Key to Continue...";
@@ -545,12 +558,28 @@ function showCountdown() {
     ctx.fillText("Get Ready!", (WINDOW_WIDTH - ctx.measureText("Get Ready!").width) / 2, WINDOW_HEIGHT / 2);
   } else if (timeLeft > 1000) {
     ctx.fillText("3", (WINDOW_WIDTH - ctx.measureText("3").width) / 2, WINDOW_HEIGHT / 2);
+    if (!game.countdownPlayed) {
+      playCountdownSound(3);
+      game.countdownPlayed = true;
+    }
   } else if (timeLeft > 0) {
     ctx.fillText("2", (WINDOW_WIDTH - ctx.measureText("2").width) / 2, WINDOW_HEIGHT / 2);
+    if (game.countdownPlayed !== 2) {
+      playCountdownSound(2);
+      game.countdownPlayed = 2;
+    }
   } else if (timeLeft > -1000) { // Show "1" for 1 second
     ctx.fillText("1", (WINDOW_WIDTH - ctx.measureText("1").width) / 2, WINDOW_HEIGHT / 2);
+    if (game.countdownPlayed !== 1) {
+      playCountdownSound(1);
+      game.countdownPlayed = 1;
+    }
   } else if (timeLeft > -2000) { // Show "Go!" for 1 second
     ctx.fillText("Go!", (WINDOW_WIDTH - ctx.measureText("Go!").width) / 2, WINDOW_HEIGHT / 2);
+    if (game.countdownPlayed !== "Go") {
+      playCountdownSound("Go");
+      game.countdownPlayed = "Go";
+    }
   } else {
     currentScreen = "game";
   }
@@ -572,7 +601,8 @@ function startGame(aiLevel = 2, humanPlayer = null) {
     lastLeftShot: 0,
     lastRightShot: 0,
     startTime: Date.now() + 3000, // Match 3s countdown
-    gameOver: false
+    gameOver: false,
+    countdownPlayed: false
   };
 }
 
