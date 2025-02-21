@@ -125,6 +125,9 @@ function playTone(frequency, duration) {
 function playLaserSound() { playTone(880, 0.1); }
 function playBounceSound() { playTone(440, 0.1); }
 function playHitSound() { playTone(200, 0.1); }
+function playExplosionSound() { playTone(120, 0.3); }
+function playPassSound() { playTone(600, 0.2); }
+function playGameOverSound() { playTone(300, 0.5); }
 
 // Game Classes
 class Laser {
@@ -236,6 +239,7 @@ let game;
 let currentScreen = "splash";
 let onePlayerMode = false;
 let screenHistory = []; // Stack to keep track of screen history
+let countdownStartTime = null; // Track countdown start time
 
 // Splash Screen
 function showSplashScreen() {
@@ -335,8 +339,39 @@ function showColorSelect() {
   ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
 }
 
+// Countdown Screen
+function showCountdown() {
+  const countdownDuration = 3000; // 3 seconds
+  const currentTime = Date.now();
+  const elapsedTime = currentTime - countdownStartTime;
+  const timeLeft = countdownDuration - elapsedTime;
+
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  ctx.fillStyle = "white";
+  ctx.font = "60px sans-serif";
+
+  if (timeLeft > 2000) {
+    ctx.fillText("Get Ready!", (WINDOW_WIDTH - ctx.measureText("Get Ready!").width) / 2, WINDOW_HEIGHT / 2);
+  } else if (timeLeft > 1000) {
+    ctx.fillText("3", (WINDOW_WIDTH - ctx.measureText("3").width) / 2, WINDOW_HEIGHT / 2);
+  } else if (timeLeft > 0) {
+    ctx.fillText("2", (WINDOW_WIDTH - ctx.measureText("2").width) / 2, WINDOW_HEIGHT / 2);
+  } else if (timeLeft > -1000) { // Show "1" for 1 second
+    ctx.fillText("1", (WINDOW_WIDTH - ctx.measureText("1").width) / 2, WINDOW_HEIGHT / 2);
+  } else if (timeLeft > -2000) { // Show "Go!" for 1 second
+    ctx.fillText("Go!", (WINDOW_WIDTH - ctx.measureText("Go!").width) / 2, WINDOW_HEIGHT / 2);
+  } else {
+    currentScreen = "game";
+  }
+}
+
 // Start Game Session
 function startGame(aiLevel = 2, humanPlayer = null) {
+  countdownStartTime = Date.now();
+  currentScreen = "countdown";
+  
   game = {
     onePlayer: onePlayerMode,
     aiLevel: aiLevel,
@@ -347,7 +382,7 @@ function startGame(aiLevel = 2, humanPlayer = null) {
     lasers: [],
     lastLeftShot: 0,
     lastRightShot: 0,
-    startTime: Date.now(),
+    startTime: Date.now() + 3000, // Match 3s countdown
     gameOver: false
   };
 }
@@ -423,6 +458,7 @@ function updateGame() {
   let currentTime = Date.now();
   if (currentTime - game.startTime >= GAME_DURATION) {
     game.gameOver = true;
+    playGameOverSound();
   }
   
   // One-Player Mode Controls
@@ -513,6 +549,7 @@ function updateGame() {
         game.rightPaddle.score += SCORE_LASER_BALL;
       }
       game.ball.explode = true;
+      playExplosionSound();
       setTimeout(() => { game.ball.reset(); }, 200);
       game.lasers.splice(i, 1);
       continue;
@@ -571,10 +608,12 @@ function updateGame() {
   
   if (game.ball.x <= BORDER_WIDTH) {
     game.rightPaddle.score += SCORE_BALL_PAST;
+    playPassSound();
     game.ball.reset();
   }
   if (game.ball.x + game.ball.size >= WINDOW_WIDTH - BORDER_WIDTH) {
     game.leftPaddle.score += SCORE_BALL_PAST;
+    playPassSound();
     game.ball.reset();
   }
   
@@ -595,6 +634,13 @@ function updateGame() {
   ctx.fillText("Blue Shields: " + game.rightPaddle.shieldsRemaining, WINDOW_WIDTH - 250, 60);
   let timeLeft = Math.max(0, GAME_DURATION - (currentTime - game.startTime));
   ctx.fillText("Time: " + Math.ceil(timeLeft/1000), WINDOW_WIDTH/2 - 30, 30);
+
+  // Display AI difficulty level discreetly
+  if (game.onePlayer) {
+    const difficultyText = `Difficulty: ${game.aiLevel === 1 ? 'Easy' : game.aiLevel === 2 ? 'Medium' : 'Hard'}`;
+    ctx.font = "16px sans-serif";
+    ctx.fillText(difficultyText, WINDOW_WIDTH - 150, WINDOW_HEIGHT - 20);
+  }
 }
 
 // Game Over Screen
@@ -632,6 +678,8 @@ function gameLoop() {
     showDifficultySelect();
   } else if (currentScreen === "colorSelect") {
     showColorSelect();
+  } else if (currentScreen === "countdown") {
+    showCountdown();
   } else if (currentScreen === "game") {
     if (!game.gameOver) {
       updateGame();
@@ -663,7 +711,6 @@ document.addEventListener("keydown", (e) => {
         screenHistory.push(currentScreen);
         onePlayerMode = false;
         startGame();
-        currentScreen = "game";
       }
     }
     else if (currentScreen === "difficultySelect") {
@@ -677,11 +724,9 @@ document.addEventListener("keydown", (e) => {
       if (e.key === "1") {
         screenHistory.push(currentScreen);
         startGame(selectedAiLevel, "red");
-        currentScreen = "game";
       } else if (e.key === "2") {
         screenHistory.push(currentScreen);
         startGame(selectedAiLevel, "blue");
-        currentScreen = "game";
       }
     }
     else if (currentScreen === "game" && game.gameOver) {
