@@ -9,45 +9,78 @@
   </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="1024" height="768"></canvas>
+<canvas id="gameCanvas"></canvas>
 <script>
+// Declare global variables
+let WINDOW_WIDTH, WINDOW_HEIGHT, PADDLE_WIDTH, PADDLE_HEIGHT, BALL_SIZE, PADDLE_SPEED, BALL_SPEED, BORDER_WIDTH, SHIELD_RADIUS;
+let ctx; // Declare ctx as a global variable
+
 // Constants
-const WINDOW_WIDTH = 1024;
-const WINDOW_HEIGHT = 768;
-const PADDLE_WIDTH = 20;
-const PADDLE_HEIGHT = 120;
-const BALL_SIZE = 50;
-const PADDLE_SPEED = 15;
-const BALL_SPEED = 4;
-const LASER_SPEED = 12;  
-const LASER_WIDTH = 20; 
+const ASPECT_RATIO = 4 / 3; // Maintain a 4:3 aspect ratio
+
+// Function to resize the canvas
+function resizeCanvas() {
+  const canvas = document.getElementById("gameCanvas");
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  
+  if (width / height > ASPECT_RATIO) {
+    canvas.height = height;
+    canvas.width = height * ASPECT_RATIO;
+  } else {
+    canvas.width = width;
+    canvas.height = width / ASPECT_RATIO;
+  }
+  
+  // Update global constants based on new canvas size
+  WINDOW_WIDTH = canvas.width;
+  WINDOW_HEIGHT = canvas.height;
+  PADDLE_WIDTH = WINDOW_WIDTH * 0.02;
+  PADDLE_HEIGHT = WINDOW_HEIGHT * 0.15;
+  BALL_SIZE = WINDOW_WIDTH * 0.05;
+  PADDLE_SPEED = WINDOW_HEIGHT * 0.02;
+  BALL_SPEED = WINDOW_WIDTH * 0.005;
+  BORDER_WIDTH = WINDOW_WIDTH * 0.005;
+  SHIELD_RADIUS = WINDOW_WIDTH * 0.05;
+  
+  ctx = canvas.getContext("2d");
+}
+
+// Call resizeCanvas on window resize
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas(); // Initial call to set up the canvas size
+
+// Player-specific constants
+const PLAYER_LASER_SPEED = 12;
+const PLAYER_LASER_COOLDOWN = 300;
+const PLAYER_SHIELD_DURATION = 2000;
+
+// AI-specific constants
+const AI_LASER_SPEEDS = {1: 8, 2: 10, 3: 13}; // Speeds for Easy, Medium, Hard
+const AI_LASER_COOLDOWNS = {1: 600, 2: 400, 3: 100};
+const AI_SHIELD_DURATIONS = {1: 1000, 2: 1500, 3: 2000}; // Shield duration by difficulty
+
+// Laser dimensions
+const LASER_WIDTH = 20;
 const LASER_HEIGHT = 5;
-const LASER_COOLDOWN = 300;
-const BORDER_WIDTH = 1;
-const SHIELD_DURATION = 2000;
-const SHIELD_RADIUS = 50;
-const GAME_DURATION = 60000; // 60 seconds
+
+// Game duration in milliseconds
+const GAME_DURATION = 60000;
 
 // Scoring values
-const SCORE_BAT_BOUNCE   = 2; // for ball bouncing off your paddle
-const SCORE_LASER_PADDLE = 3; // for laser hitting opponent's paddle
-const SCORE_BALL_PAST    = 5; // for ball passing the opponent
-const SCORE_LASER_BALL   = 1; // for laser hitting the ball
+const SCORE_BAT_BOUNCE = 2;
+const SCORE_LASER_PADDLE = 3;
+const SCORE_BALL_PAST = 5;
+const SCORE_LASER_BALL = 1;
 
-let VERSION = "0.7.6"; // Updated version number
-
-// Set the document title using the version number
+let VERSION = "0.7.15";
 document.title = `Laser Pong: Zombie Vampires v.${VERSION}`;
 
-// AI speeds based on difficulty: 1 - Easy, 2 - Medium, 3 - Hard
-const AI_SPEEDS = {1: 4, 2: 6, 3: 12};
+// AI speeds by difficulty: 1 - Easy, 2 - Medium, 3 - Hard
+const AI_SPEEDS = {1: 3, 2: 6, 3: 15};
 
-// Global variable to hold selected AI level for one-player mode
+// Global variable for selected AI level in one-player mode
 let selectedAiLevel = 2;
-
-// Canvas Setup
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
 
 // Audio Setup
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -68,13 +101,13 @@ function playHitSound() { playTone(200, 0.1); }
 
 // Game Classes
 class Laser {
-  constructor(x, y, direction) {
+  constructor(x, y, direction, isAI = false) {
     this.x = x;
     this.y = y;
     this.width = LASER_WIDTH;
     this.height = LASER_HEIGHT;
     this.direction = direction; // 1: right, -1: left
-    this.speed = LASER_SPEED * direction;
+    this.speed = (isAI ? AI_LASER_SPEEDS[game.aiLevel] : PLAYER_LASER_SPEED) * direction;
   }
   move() { this.x += this.speed; }
   draw() {
@@ -128,7 +161,6 @@ class Ball {
     this.y = WINDOW_HEIGHT/2 - BALL_SIZE/2;
     this.size = BALL_SIZE;
     this.explode = false;
-    // Random initial direction
     this.speedX = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
     this.speedY = BALL_SPEED * (Math.random() < 0.5 ? -1 : 1);
   }
@@ -144,7 +176,6 @@ class Ball {
   }
   draw() {
     if (this.explode) {
-      // Explosion effect: a bright orange circle
       ctx.fillStyle = "orange";
       ctx.beginPath();
       ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size, 0, Math.PI*2);
@@ -154,7 +185,6 @@ class Ball {
       ctx.beginPath();
       ctx.arc(this.x + this.size/2, this.y + this.size/2, this.size/2, 0, Math.PI*2);
       ctx.fill();
-      // Simple skull-like eyes
       let eyeRadius = this.size/6;
       ctx.fillStyle = "black";
       ctx.beginPath();
@@ -175,12 +205,11 @@ function drawBorder() {
 }
 
 // Game State Variables
-let game; // holds current game session info
-// Screen states: "splash", "modeSelect", "difficultySelect", "colorSelect", "game"
+let game;
 let currentScreen = "splash";
-let onePlayerMode = false; // true for one-player vs AI, false for two-player
+let onePlayerMode = false;
 
-// Splash Screen: shows title, controls, and scoring explanation
+// Splash Screen
 function showSplashScreen() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -232,7 +261,7 @@ function showModeSelect() {
   ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
 }
 
-// Difficulty Selection Screen (for One Player)
+// Difficulty Selection Screen (One Player)
 function showDifficultySelect() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -253,7 +282,7 @@ function showDifficultySelect() {
   ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 480);
 }
 
-// Color Selection Screen (for One Player)
+// Color Selection Screen (One Player)
 function showColorSelect() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -272,12 +301,12 @@ function showColorSelect() {
   ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
 }
 
-// Start Game Session; if one-player, humanPlayer is "red" or "blue"
+// Start Game Session
 function startGame(aiLevel = 2, humanPlayer = null) {
   game = {
     onePlayer: onePlayerMode,
-    aiLevel: aiLevel, // only relevant for one-player mode
-    humanPlayer: humanPlayer, // "red" or "blue" if one-player; ignored for two-player
+    aiLevel: aiLevel,
+    humanPlayer: humanPlayer, // "red" or "blue" for one-player; null for two-player
     leftPaddle: new Paddle(50, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, "red"),
     rightPaddle: new Paddle(WINDOW_WIDTH - 50 - PADDLE_WIDTH, WINDOW_HEIGHT/2 - PADDLE_HEIGHT/2, "blue"),
     ball: new Ball(),
@@ -289,7 +318,7 @@ function startGame(aiLevel = 2, humanPlayer = null) {
   };
 }
 
-// AI update for right paddle (when human is red)
+// AI for Right Paddle (human as red)
 function updateAIPaddle() {
   let aiSpeed = AI_SPEEDS[game.aiLevel] || AI_SPEEDS[2];
   let targetY = game.ball.y + game.ball.size/2 - game.rightPaddle.height/2;
@@ -301,9 +330,28 @@ function updateAIPaddle() {
   if (game.rightPaddle.y < BORDER_WIDTH) game.rightPaddle.y = BORDER_WIDTH;
   if (game.rightPaddle.y + game.rightPaddle.height > WINDOW_HEIGHT - BORDER_WIDTH)
     game.rightPaddle.y = WINDOW_HEIGHT - BORDER_WIDTH - game.rightPaddle.height;
+
+  // Shield activation for incoming lasers (from left)
+  if (!game.rightPaddle.shieldActive && game.rightPaddle.shieldsRemaining > 0) {
+    for (let laser of game.lasers) {
+      if (laser.direction > 0 && laser.x < game.rightPaddle.x && laser.x > game.rightPaddle.x - 100 &&
+          laser.y > game.rightPaddle.y && laser.y < game.rightPaddle.y + game.rightPaddle.height) {
+        game.rightPaddle.activateShield();
+        break;
+      }
+    }
+  }
+
+  // Use all shields before game ends
+  let currentTime = Date.now();
+  let timeLeft = GAME_DURATION - (currentTime - game.startTime);
+  let totalShieldTime = AI_SHIELD_DURATIONS[game.aiLevel] * game.rightPaddle.shieldsRemaining;
+  if (timeLeft < totalShieldTime && !game.rightPaddle.shieldActive && game.rightPaddle.shieldsRemaining > 0) {
+    game.rightPaddle.activateShield();
+  }
 }
 
-// AI update for left paddle (when human is blue)
+// AI for Left Paddle (human as blue)
 function updateAIPaddleLeft() {
   let aiSpeed = AI_SPEEDS[game.aiLevel] || AI_SPEEDS[2];
   let targetY = game.ball.y + game.ball.size/2 - game.leftPaddle.height/2;
@@ -315,6 +363,25 @@ function updateAIPaddleLeft() {
   if (game.leftPaddle.y < BORDER_WIDTH) game.leftPaddle.y = BORDER_WIDTH;
   if (game.leftPaddle.y + game.leftPaddle.height > WINDOW_HEIGHT - BORDER_WIDTH)
     game.leftPaddle.y = WINDOW_HEIGHT - BORDER_WIDTH - game.leftPaddle.height;
+
+  // Shield activation for incoming lasers (from right)
+  if (!game.leftPaddle.shieldActive && game.leftPaddle.shieldsRemaining > 0) {
+    for (let laser of game.lasers) {
+      if (laser.direction < 0 && laser.x > game.leftPaddle.x + game.leftPaddle.width && laser.x < game.leftPaddle.x + game.leftPaddle.width + 100 &&
+          laser.y > game.leftPaddle.y && laser.y < game.leftPaddle.y + game.leftPaddle.height) {
+        game.leftPaddle.activateShield();
+        break;
+      }
+    }
+  }
+
+  // Use all shields before game ends
+  let currentTime = Date.now();
+  let timeLeft = GAME_DURATION - (currentTime - game.startTime);
+  let totalShieldTime = AI_SHIELD_DURATIONS[game.aiLevel] * game.leftPaddle.shieldsRemaining;
+  if (timeLeft < totalShieldTime && !game.leftPaddle.shieldActive && game.leftPaddle.shieldsRemaining > 0) {
+    game.leftPaddle.activateShield();
+  }
 }
 
 // Main Game Update
@@ -330,15 +397,15 @@ function updateGame() {
       if (keysPressed["w"]) game.leftPaddle.move(true);
       if (keysPressed["s"]) game.leftPaddle.move(false);
       if (keysPressed["z"]) game.leftPaddle.activateShield();
-      if (keysPressed["a"] && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
+      if (keysPressed["a"] && currentTime - game.lastLeftShot >= PLAYER_LASER_COOLDOWN) {
         game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
         playLaserSound();
         game.lastLeftShot = currentTime;
       }
       updateAIPaddle();
-      if (currentTime - game.lastRightShot >= LASER_COOLDOWN / (game.aiLevel === 3 ? 2 : 1)) {
+      if (currentTime - game.lastRightShot >= AI_LASER_COOLDOWNS[game.aiLevel]) {
         if (game.ball.speedX > 0 && game.ball.x > WINDOW_WIDTH/2) {
-          game.lasers.push(new Laser(game.rightPaddle.x, game.ball.y + game.ball.size/2, -1));
+          game.lasers.push(new Laser(game.rightPaddle.x, game.ball.y + game.ball.size/2, -1, true));
           playLaserSound();
           game.lastRightShot = currentTime;
         }
@@ -347,15 +414,15 @@ function updateGame() {
       if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
       if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
       if (keysPressed["ArrowRight"]) game.rightPaddle.activateShield();
-      if (keysPressed["ArrowLeft"] && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
+      if (keysPressed["ArrowLeft"] && currentTime - game.lastRightShot >= PLAYER_LASER_COOLDOWN) {
         game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
         playLaserSound();
         game.lastRightShot = currentTime;
       }
       updateAIPaddleLeft();
-      if (currentTime - game.lastLeftShot >= LASER_COOLDOWN / (game.aiLevel === 3 ? 2 : 1)) {
+      if (currentTime - game.lastLeftShot >= AI_LASER_COOLDOWNS[game.aiLevel]) {
         if (game.ball.speedX < 0 && game.ball.x < WINDOW_WIDTH/2) {
-          game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.ball.y + game.ball.size/2, 1));
+          game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.ball.y + game.ball.size/2, 1, true));
           playLaserSound();
           game.lastLeftShot = currentTime;
         }
@@ -366,7 +433,7 @@ function updateGame() {
     if (keysPressed["w"]) game.leftPaddle.move(true);
     if (keysPressed["s"]) game.leftPaddle.move(false);
     if (keysPressed["z"]) game.leftPaddle.activateShield();
-    if (keysPressed["a"] && currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
+    if (keysPressed["a"] && currentTime - game.lastLeftShot >= PLAYER_LASER_COOLDOWN) {
       game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
       playLaserSound();
       game.lastLeftShot = currentTime;
@@ -374,20 +441,26 @@ function updateGame() {
     if (keysPressed["ArrowUp"]) game.rightPaddle.move(true);
     if (keysPressed["ArrowDown"]) game.rightPaddle.move(false);
     if (keysPressed["ArrowRight"]) game.rightPaddle.activateShield();
-    if (keysPressed["ArrowLeft"] && currentTime - game.lastRightShot >= LASER_COOLDOWN) {
+    if (keysPressed["ArrowLeft"] && currentTime - game.lastRightShot >= PLAYER_LASER_COOLDOWN) {
       game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
       playLaserSound();
       game.lastRightShot = currentTime;
     }
   }
   
-  // Deactivate shields after duration
-  if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= SHIELD_DURATION)
+  // Deactivate shields based on controller type
+  let leftShieldDuration = game.onePlayer && game.humanPlayer === "red" ? PLAYER_SHIELD_DURATION : AI_SHIELD_DURATIONS[game.aiLevel];
+  let rightShieldDuration = game.onePlayer && game.humanPlayer === "blue" ? PLAYER_SHIELD_DURATION : AI_SHIELD_DURATIONS[game.aiLevel];
+  if (!game.onePlayer) {
+    leftShieldDuration = PLAYER_SHIELD_DURATION;
+    rightShieldDuration = PLAYER_SHIELD_DURATION;
+  }
+  if (game.leftPaddle.shieldActive && currentTime - game.leftPaddle.shieldStartTime >= leftShieldDuration)
     game.leftPaddle.shieldActive = false;
-  if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= SHIELD_DURATION)
+  if (game.rightPaddle.shieldActive && currentTime - game.rightPaddle.shieldStartTime >= rightShieldDuration)
     game.rightPaddle.shieldActive = false;
   
-  // Process lasers collisions
+  // Process laser collisions
   for (let i = game.lasers.length - 1; i >= 0; i--) {
     let laser = game.lasers[i];
     laser.move();
@@ -437,7 +510,7 @@ function updateGame() {
     }
   }
   
-  // Move ball and check for paddle collisions (bat bounce)
+  // Move ball and check paddle collisions
   game.ball.move();
   if (game.ball.x < game.leftPaddle.x + game.leftPaddle.width &&
       game.ball.x + game.ball.size > game.leftPaddle.x &&
@@ -484,11 +557,13 @@ function updateGame() {
   ctx.font = "24px sans-serif";
   ctx.fillText("Red Score: " + game.leftPaddle.score, 50, 30);
   ctx.fillText("Blue Score: " + game.rightPaddle.score, WINDOW_WIDTH - 250, 30);
+  ctx.fillText("Red Shields: " + game.leftPaddle.shieldsRemaining, 50, 60);
+  ctx.fillText("Blue Shields: " + game.rightPaddle.shieldsRemaining, WINDOW_WIDTH - 250, 60);
   let timeLeft = Math.max(0, GAME_DURATION - (currentTime - game.startTime));
   ctx.fillText("Time: " + Math.ceil(timeLeft/1000), WINDOW_WIDTH/2 - 30, 30);
 }
 
-// Display Game Over Screen
+// Game Over Screen
 function showGameOver() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
