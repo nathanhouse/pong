@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Laser Pong: Zombie Vampires v.0.7.3</title>
+  <title>Laser Pong: Zombie Vampires</title>
   <style>
     body { margin: 0; background: black; }
     canvas { display: block; margin: auto; background: black; }
@@ -19,10 +19,10 @@ const PADDLE_HEIGHT = 120;
 const BALL_SIZE = 50;
 const PADDLE_SPEED = 15;
 const BALL_SPEED = 4;
-const LASER_SPEED = 8;  
+const LASER_SPEED = 12;  
 const LASER_WIDTH = 20; 
 const LASER_HEIGHT = 5;
-const LASER_COOLDOWN = 500;
+const LASER_COOLDOWN = 300;
 const BORDER_WIDTH = 1;
 const SHIELD_DURATION = 2000;
 const SHIELD_RADIUS = 50;
@@ -34,10 +34,13 @@ const SCORE_LASER_PADDLE = 3; // for laser hitting opponent's paddle
 const SCORE_BALL_PAST    = 5; // for ball passing the opponent
 const SCORE_LASER_BALL   = 1; // for laser hitting the ball
 
-let VERSION = "0.7.3";
+let VERSION = "0.7.6"; // Updated version number
+
+// Set the document title using the version number
+document.title = `Laser Pong: Zombie Vampires v.${VERSION}`;
 
 // AI speeds based on difficulty: 1 - Easy, 2 - Medium, 3 - Hard
-const AI_SPEEDS = {1: 4, 2: 6, 3: 8};
+const AI_SPEEDS = {1: 4, 2: 6, 3: 12};
 
 // Global variable to hold selected AI level for one-player mode
 let selectedAiLevel = 2;
@@ -183,7 +186,7 @@ function showSplashScreen() {
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
   ctx.fillStyle = "white";
   ctx.font = "50px sans-serif";
-  let title = "Laser Pong: Zombie Vampires v." + VERSION;
+  let title = `Laser Pong: Zombie Vampires v.${VERSION}`;
   ctx.fillText(title, (WINDOW_WIDTH - ctx.measureText(title).width)/2, 80);
   
   ctx.font = "24px sans-serif";
@@ -333,9 +336,9 @@ function updateGame() {
         game.lastLeftShot = currentTime;
       }
       updateAIPaddle();
-      if (currentTime - game.lastRightShot >= LASER_COOLDOWN) {
+      if (currentTime - game.lastRightShot >= LASER_COOLDOWN / (game.aiLevel === 3 ? 2 : 1)) {
         if (game.ball.speedX > 0 && game.ball.x > WINDOW_WIDTH/2) {
-          game.lasers.push(new Laser(game.rightPaddle.x, game.rightPaddle.y + game.rightPaddle.height/2, -1));
+          game.lasers.push(new Laser(game.rightPaddle.x, game.ball.y + game.ball.size/2, -1));
           playLaserSound();
           game.lastRightShot = currentTime;
         }
@@ -350,9 +353,9 @@ function updateGame() {
         game.lastRightShot = currentTime;
       }
       updateAIPaddleLeft();
-      if (currentTime - game.lastLeftShot >= LASER_COOLDOWN) {
+      if (currentTime - game.lastLeftShot >= LASER_COOLDOWN / (game.aiLevel === 3 ? 2 : 1)) {
         if (game.ball.speedX < 0 && game.ball.x < WINDOW_WIDTH/2) {
-          game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.leftPaddle.y + game.leftPaddle.height/2, 1));
+          game.lasers.push(new Laser(game.leftPaddle.x + game.leftPaddle.width, game.ball.y + game.ball.size/2, 1));
           playLaserSound();
           game.lastLeftShot = currentTime;
         }
