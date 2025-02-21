@@ -101,7 +101,8 @@ const SCORE_BALL_PAST = 5;
 const SCORE_LASER_BALL = 1;
 
 let VERSION = "0.7.15";
-document.title = `Laser Pong: Zombie Vampires v.${VERSION}`;
+const HIGH_SCORE_KEY = "laserPongHighScore";
+let highScore = localStorage.getItem(HIGH_SCORE_KEY) || 0;
 
 // AI speeds by difficulty: 1 - Easy, 2 - Medium, 3 - Hard
 const AI_SPEEDS = {1: 3, 2: 6, 3: 15};
@@ -278,6 +279,12 @@ function showSplashScreen() {
     ctx.fillText(line, (WINDOW_WIDTH - ctx.measureText(line).width) / 2, startY);
     startY += textFontSize + 5; // Add some spacing between lines
   });
+
+  // Add high score display
+  ctx.font = `${textFontSize}px sans-serif`;
+  const highScoreText = `High Score: ${highScore}`;
+  ctx.fillText(highScoreText, (WINDOW_WIDTH - ctx.measureText(highScoreText).width)/2, startY);
+  startY += textFontSize + 20;
 }
 
 // Mode Selection Screen
@@ -459,6 +466,12 @@ function updateGame() {
   if (currentTime - game.startTime >= GAME_DURATION) {
     game.gameOver = true;
     playGameOverSound();
+    
+    const maxScore = Math.max(game.leftPaddle.score, game.rightPaddle.score);
+    if (maxScore > highScore) {
+      highScore = maxScore;
+      localStorage.setItem(HIGH_SCORE_KEY, highScore);
+    }
   }
   
   // One-Player Mode Controls
@@ -634,6 +647,7 @@ function updateGame() {
   ctx.fillText("Blue Shields: " + game.rightPaddle.shieldsRemaining, WINDOW_WIDTH - 250, 60);
   let timeLeft = Math.max(0, GAME_DURATION - (currentTime - game.startTime));
   ctx.fillText("Time: " + Math.ceil(timeLeft/1000), WINDOW_WIDTH/2 - 30, 30);
+  ctx.fillText(`High Score: ${highScore}`, WINDOW_WIDTH/2 - 60, 90);
 
   // Display AI difficulty level discreetly
   if (game.onePlayer) {
