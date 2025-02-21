@@ -21,6 +21,7 @@
       max-height: 100vh;
     }
   </style>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
@@ -275,6 +276,20 @@ function showPreSplashScreen() {
       imgWidth, 
       imgHeight
     );
+
+    // Add "Press Any Key" text
+    ctx.fillStyle = "white";
+    ctx.font = "30px sans-serif";
+    const pressText = "Press Any Key to Continue";
+    // Add a semi-transparent black background for better text visibility
+    const textWidth = ctx.measureText(pressText).width;
+    const textHeight = 40;
+    const textY = WINDOW_HEIGHT - 100;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect((WINDOW_WIDTH - textWidth) / 2 - 20, textY - 30, textWidth + 40, textHeight);
+    // Draw the text
+    ctx.fillStyle = "white";
+    ctx.fillText(pressText, (WINDOW_WIDTH - textWidth) / 2, textY);
   }
 }
 
@@ -284,80 +299,193 @@ function showSplashScreen() {
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
   // Dynamic font sizes based on canvas size
-  const titleFontSize = Math.min(WINDOW_WIDTH * 0.05, 50); // Max 50px
-  const textFontSize = Math.min(WINDOW_WIDTH * 0.02, 24);  // Max 24px
+  const titleFontSize = Math.min(WINDOW_WIDTH * 0.05, 50);
+  const textFontSize = Math.min(WINDOW_WIDTH * 0.02, 24);
 
-  ctx.fillStyle = "white";
-  ctx.font = `${titleFontSize}px sans-serif`;
+  // Draw title with gradient
+  ctx.font = `bold ${titleFontSize}px sans-serif`;
   let title = `Laser Pong: Zombie Vampires v.${VERSION}`;
+  
+  // Create gradient for title
+  let gradient = ctx.createLinearGradient(0, titleFontSize, 0, titleFontSize + 40);
+  gradient.addColorStop(0, '#ff3366');   // Hot pink
+  gradient.addColorStop(1, '#33ccff');   // Cyan
+  ctx.fillStyle = gradient;
   ctx.fillText(title, (WINDOW_WIDTH - ctx.measureText(title).width) / 2, titleFontSize + 20);
 
+  // Instructions with colored sections
   ctx.font = `${textFontSize}px sans-serif`;
-  let instructions = [
-    "Controls:",
-    "Red Paddle (Player 1 - Left): W (up), S (down), A (shoot laser), Z (shield)",
-    "Blue Paddle (Player 2 - Right): Up (up), Down (down), Left (shoot laser), Right (shield)",
-    "In One Player mode, you'll face an AI.",
-    "",
-    "Scoring:",
+  let startY = titleFontSize + 60;
+
+  // Controls section
+  ctx.fillStyle = '#33ccff';  // Cyan for headers
+  ctx.fillText("Controls:", (WINDOW_WIDTH - ctx.measureText("Controls:").width) / 2, startY);
+  startY += textFontSize + 15;  // Increased spacing after header
+
+  // Center both control sections
+  const controlsX = WINDOW_WIDTH / 2;
+  
+  // Red player controls
+  ctx.fillStyle = '#ff3366';  // Red player controls
+  ctx.fillText("Red Paddle (Player 1 - Left):", (WINDOW_WIDTH - ctx.measureText("Red Paddle (Player 1 - Left):").width) / 2, startY);
+  startY += textFontSize + 5;
+  ctx.fillStyle = 'white';
+  const redControls = "W (up), S (down), A (shoot laser), Z (shield)";
+  ctx.fillText(redControls, (WINDOW_WIDTH - ctx.measureText(redControls).width) / 2, startY);
+  startY += textFontSize + 15;  // Increased spacing between players
+
+  // Blue player controls
+  ctx.fillStyle = '#3366ff';  // Blue player controls
+  ctx.fillText("Blue Paddle (Player 2 - Right):", (WINDOW_WIDTH - ctx.measureText("Blue Paddle (Player 2 - Right):").width) / 2, startY);
+  startY += textFontSize + 5;
+  ctx.fillStyle = 'white';
+  const blueControls = "↑ (up), ↓ (down), ← (shoot laser), → (shield)";
+  ctx.fillText(blueControls, (WINDOW_WIDTH - ctx.measureText(blueControls).width) / 2, startY);
+  startY += textFontSize + 15;  // Increased spacing after controls
+
+  // AI mode text
+  ctx.fillStyle = 'white';
+  const aiText = "In One Player mode, you'll face an AI.";
+  ctx.fillText(aiText, (WINDOW_WIDTH - ctx.measureText(aiText).width) / 2, startY);
+  startY += textFontSize + 25;  // Extra spacing before next section
+
+  // Scoring section
+  ctx.fillStyle = '#33ccff';  // Cyan for headers
+  ctx.fillText("Scoring:", (WINDOW_WIDTH - ctx.measureText("Scoring:").width) / 2, startY);
+  startY += textFontSize + 10;
+
+  ctx.fillStyle = '#00ff00';  // Green for scoring rules
+  const scoreRules = [
     " • Bounce ball off your paddle: +2 points",
     " • Laser hitting opponent's paddle: +3 points",
     " • Laser hitting the ball: +1 point (ball explodes and resets)",
-    " • Ball passing the opponent: +5 points",
-    "",
-    "Game lasts 60 seconds. Highest score wins!",
-    "",
-    "Press any key to continue..."
+    " • Ball passing the opponent: +5 points"
   ];
 
-  let startY = titleFontSize + 40;
-  instructions.forEach(line => {
-    ctx.fillText(line, (WINDOW_WIDTH - ctx.measureText(line).width) / 2, startY);
-    startY += textFontSize + 5; // Add some spacing between lines
+  scoreRules.forEach(rule => {
+    ctx.fillText(rule, (WINDOW_WIDTH - ctx.measureText(rule).width) / 2, startY);
+    startY += textFontSize + 5;
   });
 
-  // Add high score display
-  ctx.font = `${textFontSize}px sans-serif`;
-  const highScoreText = `High Score: ${highScore}`;
-  ctx.fillText(highScoreText, (WINDOW_WIDTH - ctx.measureText(highScoreText).width)/2, startY);
+  startY += textFontSize;
+
+  // Game duration
+  ctx.fillStyle = 'yellow';
+  ctx.fillText("Game lasts 60 seconds. Highest score wins!", (WINDOW_WIDTH - ctx.measureText("Game lasts 60 seconds. Highest score wins!").width) / 2, startY);
   startY += textFontSize + 20;
+
+  // High score display with pulsing effect
+  const time = Date.now() * 0.001;  // Convert to seconds
+  const alpha = 0.7 + 0.3 * Math.sin(time * 2);  // Pulsing alpha between 0.7 and 1.0
+  ctx.fillStyle = `rgba(255, 215, 0, ${alpha})`;  // Gold color with pulsing alpha
+  const highScoreText = `High Score: ${highScore}`;
+  ctx.fillText(highScoreText, (WINDOW_WIDTH - ctx.measureText(highScoreText).width) / 2, startY);
+  startY += textFontSize + 20;
+
+  // Continue prompt with pulsing effect
+  ctx.font = `bold ${textFontSize * 1.2}px sans-serif`;
+  const promptAlpha = 0.7 + 0.3 * Math.sin(time * 4);  // Faster pulsing
+  ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha})`;
+  const promptText = "Press Any Key to Continue...";
+  ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width) / 2, startY);
 }
 
 // Mode Selection Screen
 function showModeSelect() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = "white";
+
+  // Title with gradient
   ctx.font = "40px sans-serif";
-  let text = "Select Game Mode";
-  ctx.fillText(text, (WINDOW_WIDTH - ctx.measureText(text).width)/2, 200);
+  let titleText = "Select Game Mode";
   
+  let gradient = ctx.createLinearGradient(0, 180, 0, 220);
+  gradient.addColorStop(0, '#ff3366');   // Hot pink
+  gradient.addColorStop(1, '#33ccff');   // Cyan
+  ctx.fillStyle = gradient;
+  ctx.fillText(titleText, (WINDOW_WIDTH - ctx.measureText(titleText).width)/2, 200);
+  
+  // Options with pulsing effects
+  const time = Date.now() * 0.001;
+  
+  // Option 1 with pink glow
   ctx.font = "30px sans-serif";
+  const option1Alpha = 0.7 + 0.3 * Math.sin(time * 2);
+  ctx.fillStyle = `rgba(255, 51, 102, ${option1Alpha})`; // Pulsing pink
   let option1 = "1 - One Player (vs AI)";
-  let option2 = "2 - Two Player";
   ctx.fillText(option1, (WINDOW_WIDTH - ctx.measureText(option1).width)/2, 300);
+
+  // Option 2 with blue glow
+  const option2Alpha = 0.7 + 0.3 * Math.sin(time * 2 + Math.PI); // Offset pulse
+  ctx.fillStyle = `rgba(51, 204, 255, ${option2Alpha})`; // Pulsing cyan
+  let option2 = "2 - Two Player";
   ctx.fillText(option2, (WINDOW_WIDTH - ctx.measureText(option2).width)/2, 350);
+
+  // Prompt text with white pulsing
+  const promptAlpha = 0.7 + 0.3 * Math.sin(time * 4);
+  ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha})`;
   ctx.font = "24px sans-serif";
   let promptText = "Press 1 or 2 to select";
-  ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
+  
+  // Add background for prompt
+  const textWidth = ctx.measureText(promptText).width;
+  const textHeight = 40;
+  const textY = 420;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect((WINDOW_WIDTH - textWidth) / 2 - 20, textY - 30, textWidth + 40, textHeight);
+  
+  // Draw prompt text
+  ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha})`;
+  ctx.fillText(promptText, (WINDOW_WIDTH - textWidth)/2, textY);
+
+  // Add "B to go back" text
+  ctx.font = "20px sans-serif";
+  const backText = "Press B to go back";
+  const backTextWidth = ctx.measureText(backText).width;
+  ctx.fillStyle = "rgba(150, 150, 150, 0.7)";
+  ctx.fillText(backText, (WINDOW_WIDTH - backTextWidth)/2, WINDOW_HEIGHT - 40);
 }
 
 // Difficulty Selection Screen (One Player)
 function showDifficultySelect() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = "white";
+
+  // Title with gradient
   ctx.font = "40px sans-serif";
-  let text = "Select AI Difficulty";
-  ctx.fillText(text, (WINDOW_WIDTH - ctx.measureText(text).width)/2, 200);
+  let titleText = "Select AI Difficulty";
   
+  let gradient = ctx.createLinearGradient(0, 180, 0, 220);
+  gradient.addColorStop(0, '#ff3366');   // Hot pink
+  gradient.addColorStop(1, '#33ccff');   // Cyan
+  ctx.fillStyle = gradient;
+  ctx.fillText(titleText, (WINDOW_WIDTH - ctx.measureText(titleText).width)/2, 200);
+  
+  // Options with pulsing effects
+  const time = Date.now() * 0.001;
+  
+  // Easy option with green glow
   ctx.font = "30px sans-serif";
+  const easyAlpha = 0.7 + 0.3 * Math.sin(time * 2);
+  ctx.fillStyle = `rgba(0, 255, 0, ${easyAlpha})`; // Pulsing green
   let easy = "1 - Easy";
-  let medium = "2 - Medium";
-  let hard = "3 - Hard";
   ctx.fillText(easy, (WINDOW_WIDTH - ctx.measureText(easy).width)/2, 300);
+
+  // Medium option with yellow glow
+  const mediumAlpha = 0.7 + 0.3 * Math.sin(time * 2 + Math.PI / 2);
+  ctx.fillStyle = `rgba(255, 255, 0, ${mediumAlpha})`; // Pulsing yellow
+  let medium = "2 - Medium";
   ctx.fillText(medium, (WINDOW_WIDTH - ctx.measureText(medium).width)/2, 350);
+
+  // Hard option with red glow
+  const hardAlpha = 0.7 + 0.3 * Math.sin(time * 2 + Math.PI);
+  ctx.fillStyle = `rgba(255, 0, 0, ${hardAlpha})`; // Pulsing red
+  let hard = "3 - Hard";
   ctx.fillText(hard, (WINDOW_WIDTH - ctx.measureText(hard).width)/2, 400);
+
+  // Prompt text with white pulsing
+  const promptAlpha = 0.7 + 0.3 * Math.sin(time * 4);
+  ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha})`;
   ctx.font = "24px sans-serif";
   let promptText = "Press 1, 2, or 3 to select";
   ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 480);
@@ -367,16 +495,34 @@ function showDifficultySelect() {
 function showColorSelect() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = "white";
+
+  // Title with gradient
   ctx.font = "40px sans-serif";
-  let text = "Select Your Color";
-  ctx.fillText(text, (WINDOW_WIDTH - ctx.measureText(text).width)/2, 200);
+  let titleText = "Select Your Color";
   
+  let gradient = ctx.createLinearGradient(0, 180, 0, 220);
+  gradient.addColorStop(0, '#ff3366');   // Hot pink
+  gradient.addColorStop(1, '#33ccff');   // Cyan
+  ctx.fillStyle = gradient;
+  ctx.fillText(titleText, (WINDOW_WIDTH - ctx.measureText(titleText).width)/2, 200);
+  
+  // Red option with red glow
   ctx.font = "30px sans-serif";
+  const time = Date.now() * 0.001;
+  const redAlpha = 0.7 + 0.3 * Math.sin(time * 2);
+  ctx.fillStyle = `rgba(255, 51, 51, ${redAlpha})`; // Pulsing red
   let redOption = "1 - Red (Left)";
-  let blueOption = "2 - Blue (Right)";
   ctx.fillText(redOption, (WINDOW_WIDTH - ctx.measureText(redOption).width)/2, 300);
+
+  // Blue option with blue glow
+  const blueAlpha = 0.7 + 0.3 * Math.sin(time * 2 + Math.PI);
+  ctx.fillStyle = `rgba(51, 102, 255, ${blueAlpha})`; // Pulsing blue
+  let blueOption = "2 - Blue (Right)";
   ctx.fillText(blueOption, (WINDOW_WIDTH - ctx.measureText(blueOption).width)/2, 350);
+
+  // Prompt text with white pulsing
+  const promptAlpha = 0.7 + 0.3 * Math.sin(time * 4);
+  ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha})`;
   ctx.font = "24px sans-serif";
   let promptText = "Press 1 or 2 to select";
   ctx.fillText(promptText, (WINDOW_WIDTH - ctx.measureText(promptText).width)/2, 420);
@@ -393,7 +539,7 @@ function showCountdown() {
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
   ctx.fillStyle = "white";
-  ctx.font = "60px sans-serif";
+  ctx.font = "80px 'Orbitron', sans-serif";
 
   if (timeLeft > 2000) {
     ctx.fillText("Get Ready!", (WINDOW_WIDTH - ctx.measureText("Get Ready!").width) / 2, WINDOW_HEIGHT / 2);
@@ -676,7 +822,7 @@ function updateGame() {
   game.lasers.forEach(laser => laser.draw());
   
   ctx.fillStyle = "white";
-  ctx.font = "24px sans-serif";
+  ctx.font = "24px 'Orbitron', sans-serif";
   ctx.fillText("Red Score: " + game.leftPaddle.score, 50, 30);
   ctx.fillText("Blue Score: " + game.rightPaddle.score, WINDOW_WIDTH - 250, 30);
   ctx.fillText("Red Shields: " + game.leftPaddle.shieldsRemaining, 50, 60);
@@ -688,7 +834,7 @@ function updateGame() {
   // Display AI difficulty level discreetly
   if (game.onePlayer) {
     const difficultyText = `Difficulty: ${game.aiLevel === 1 ? 'Easy' : game.aiLevel === 2 ? 'Medium' : 'Hard'}`;
-    ctx.font = "16px sans-serif";
+    ctx.font = "16px 'Orbitron', sans-serif";
     ctx.fillText(difficultyText, WINDOW_WIDTH - 150, WINDOW_HEIGHT - 20);
   }
 }
@@ -697,8 +843,9 @@ function updateGame() {
 function showGameOver() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-  ctx.fillStyle = "white";
-  ctx.font = "60px sans-serif";
+
+  // Winner text with gradient
+  ctx.font = "60px 'Orbitron', sans-serif";
   let winnerText = "";
   if (game.leftPaddle.score > game.rightPaddle.score) {
     winnerText = game.onePlayer && game.humanPlayer === "red" ? "You Win!" : "Red Wins!";
@@ -707,13 +854,24 @@ function showGameOver() {
   } else {
     winnerText = "Tie Game!";
   }
+
+  let gradient = ctx.createLinearGradient(0, WINDOW_HEIGHT/2 - 60, 0, WINDOW_HEIGHT/2);
+  gradient.addColorStop(0, '#ff3366');   // Hot pink
+  gradient.addColorStop(1, '#33ccff');   // Cyan
+  ctx.fillStyle = gradient;
   ctx.fillText(winnerText, (WINDOW_WIDTH - ctx.measureText(winnerText).width)/2, WINDOW_HEIGHT/2 - 60);
-  
-  ctx.font = "40px sans-serif";
+
+  // Score text
+  ctx.font = "40px 'Orbitron', sans-serif";
+  ctx.fillStyle = "white";
   let scoreText = "Red: " + game.leftPaddle.score + " | Blue: " + game.rightPaddle.score;
   ctx.fillText(scoreText, (WINDOW_WIDTH - ctx.measureText(scoreText).width)/2, WINDOW_HEIGHT/2);
-  
-  ctx.font = "30px sans-serif";
+
+  // Instructions with pulsing effect
+  ctx.font = "30px 'Orbitron', sans-serif";
+  const time = Date.now() * 0.001;
+  const instructionAlpha = 0.7 + 0.3 * Math.sin(time * 4);
+  ctx.fillStyle = `rgba(255, 255, 255, ${instructionAlpha})`;
   let instruction = "Press SPACE to restart or M for menu";
   ctx.fillText(instruction, (WINDOW_WIDTH - ctx.measureText(instruction).width)/2, WINDOW_HEIGHT/2 + 60);
 }
