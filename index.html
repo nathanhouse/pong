@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Laser Pong: Zombie Vampires</title>
   <style>
     body { 
@@ -23,6 +24,7 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
+<img src="https://nathanhouse.github.io/pong/splash.webp" alt="Pong Splash Image" />
 <script>
 // Declare global variables
 let WINDOW_WIDTH, WINDOW_HEIGHT, PADDLE_WIDTH, PADDLE_HEIGHT, BALL_SIZE, PADDLE_SPEED, BALL_SPEED, BORDER_WIDTH, SHIELD_RADIUS;
@@ -248,7 +250,7 @@ function showPreSplashScreen() {
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
   const img = new Image();
-  img.src = "/splash.webp"; // Update with your image path
+  img.src = "splash.webp"; // Corrected path for GitHub Pages
 
   img.onload = function() {
     ctx.drawImage(img, (WINDOW_WIDTH - img.width) / 2, (WINDOW_HEIGHT - img.height) / 2);
