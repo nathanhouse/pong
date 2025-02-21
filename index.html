@@ -24,11 +24,12 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
-<img src="https://nathanhouse.github.io/pong/splash.webp" alt="Pong Splash Image" />
 <script>
 // Declare global variables
 let WINDOW_WIDTH, WINDOW_HEIGHT, PADDLE_WIDTH, PADDLE_HEIGHT, BALL_SIZE, PADDLE_SPEED, BALL_SPEED, BORDER_WIDTH, SHIELD_RADIUS;
 let ctx; // Declare ctx as a global variable
+let preloadedImage = null;
+let imageLoaded = false;
 
 // Constants
 const ASPECT_RATIO = 4 / 3; // Maintain a 4:3 aspect ratio
@@ -249,12 +250,32 @@ function showPreSplashScreen() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-  const img = new Image();
-  img.src = "splash.webp"; // Corrected path for GitHub Pages
+  if (!preloadedImage) {
+    preloadedImage = new Image();
+    preloadedImage.src = "splash.webp";
+    preloadedImage.onload = function() {
+      imageLoaded = true;
+    };
+  }
 
-  img.onload = function() {
-    ctx.drawImage(img, (WINDOW_WIDTH - img.width) / 2, (WINDOW_HEIGHT - img.height) / 2);
-  };
+  if (imageLoaded && preloadedImage) {
+    const aspectRatio = preloadedImage.width / preloadedImage.height;
+    let imgWidth = WINDOW_WIDTH;
+    let imgHeight = WINDOW_WIDTH / aspectRatio;
+
+    if (imgHeight > WINDOW_HEIGHT) {
+      imgHeight = WINDOW_HEIGHT;
+      imgWidth = WINDOW_HEIGHT * aspectRatio;
+    }
+
+    ctx.drawImage(
+      preloadedImage, 
+      (WINDOW_WIDTH - imgWidth) / 2, 
+      (WINDOW_HEIGHT - imgHeight) / 2, 
+      imgWidth, 
+      imgHeight
+    );
+  }
 }
 
 // Splash Screen
